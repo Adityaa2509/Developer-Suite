@@ -1,0 +1,28 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/.env
+backend/chroma_db/
+backend/logs/
+backend/devmind.db
+backend/docs
+*.egg-info/
+
+# Salesforce
+.sfdx/
+.sf/
+
+# VS Code
+.vscode/
+
+# Mac
+.DS_Store
+**/.DS_Store
+
+# Project Docs
+docs/
+
+# Pragati's Module
+Pragati's Module/

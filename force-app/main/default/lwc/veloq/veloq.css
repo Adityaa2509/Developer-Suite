@@ -1,0 +1,542 @@
+/* ─── Veloq Global Design Tokens ───────────────────────────────── */
+.veloq-app {
+    background: radial-gradient(circle at 50% -20%, rgba(124, 58, 237, 0.2) 0%, #08080c 60%);
+    color: #e2e8f0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    border-radius: 16px;
+    border: 1px solid rgba(139, 92, 246, 0.15);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(124, 58, 237, 0.05);
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: visible; /* CRITICAL: Prevents dropdown menu from being clipped! */
+}
+
+/* ─── Header Styling ────────────────────────────────────────────── */
+.veloq-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 28px;
+    background: rgba(8, 8, 12, 0.6);
+    backdrop-filter: blur(25px);
+    border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    position: relative;
+    z-index: 999;
+}
+.veloq-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.veloq-logo {
+    font-size: 24px;
+    filter: drop-shadow(0 0 12px #8b5cf6);
+    animation: floating 3s ease-in-out infinite;
+}
+@keyframes floating {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+}
+.veloq-title {
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #3b82f6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 30px rgba(139, 92, 246, 0.3);
+}
+.veloq-subtitle {
+    font-size: 9px;
+    font-weight: 700;
+    color: #64748b;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    padding-left: 12px;
+    letter-spacing: 2px;
+}
+.veloq-status-pill {
+    background: rgba(16, 185, 129, 0.1);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 4px 12px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.1);
+}
+
+/* ─── Custom Glowing Dropdown Menu (Jhakkas Selector) ─────────────── */
+.veloq-dropdown-container {
+    position: relative;
+}
+.veloq-dropdown-trigger {
+    background: rgba(13, 13, 22, 0.6);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-radius: 10px;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 10px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+.veloq-dropdown-trigger:hover {
+    background: rgba(139, 92, 246, 0.08);
+    border-color: #a78bfa;
+    box-shadow: 0 0 25px rgba(139, 92, 246, 0.35);
+    transform: translateY(-1px);
+}
+.trigger-arrow {
+    font-size: 9px;
+    color: #94a3b8;
+    transition: transform 0.2s ease;
+}
+.veloq-dropdown-container:hover .trigger-arrow {
+    transform: rotate(180deg);
+    color: #a78bfa;
+}
+
+/* Dropdown Menu List */
+.veloq-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 290px;
+    background: rgba(8, 8, 12, 0.9);
+    backdrop-filter: blur(30px);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 14px;
+    padding: 8px;
+    z-index: 99999; /* Higher than any standard Salesforce layers */
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(124, 58, 237, 0.2);
+}
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.dropdown-item:hover {
+    background: rgba(124, 58, 237, 0.15);
+    box-shadow: inset 0 0 0 1px rgba(124, 58, 237, 0.25);
+}
+.item-icon {
+    font-size: 20px;
+    background: rgba(13, 13, 22, 0.5);
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    transition: all 0.2s ease;
+}
+.dropdown-item:hover .item-icon {
+    background: rgba(124, 58, 237, 0.3);
+    border-color: #a78bfa;
+    transform: scale(1.05);
+}
+.item-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.item-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+}
+.item-desc {
+    font-size: 10px;
+    color: #94a3b8;
+}
+
+/* Slide Down Animation */
+.animate-slide-down {
+    animation: slidedown 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes slidedown {
+    from { opacity: 0; transform: translate(-50%, -12px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ─── Main Body & Layouts ────────────────────────────────────────── */
+.veloq-body {
+    flex: 1;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 1;
+}
+.builder-layout {
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    gap: 28px;
+    flex: 1;
+}
+.debugger-layout {
+    flex: 1;
+}
+
+/* ─── Cyberpunk Panel Cards ─────────────────────────────────────── */
+.panel-card {
+    background: rgba(13, 13, 22, 0.45);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(139, 92, 246, 0.12);
+    border-radius: 16px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(124, 58, 237, 0.02);
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+.panel-card:hover {
+    border-color: rgba(139, 92, 246, 0.25);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 30px rgba(124, 58, 237, 0.08);
+}
+.panel-header {
+    margin-bottom: 20px;
+}
+.panel-header h3 {
+    font-size: 16px;
+    font-weight: 800;
+    color: #ffffff;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+}
+.panel-subtitle {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+/* ─── Schema Dropper ────────────────────────────────────────────── */
+.builder-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+.dropper-card {
+    min-height: 180px;
+}
+.dropper-area {
+    border: 2px dashed rgba(139, 92, 246, 0.25);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    cursor: pointer;
+    flex: 1;
+    transition: all 0.3s ease;
+    background: rgba(0, 0, 0, 0.15);
+}
+.dropper-area.active, .dropper-area:hover {
+    border-color: #a78bfa;
+    background: rgba(139, 92, 246, 0.05);
+    box-shadow: 0 0 15px rgba(139, 92, 246, 0.15);
+}
+.drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+.drop-icon {
+    font-size: 28px;
+    filter: drop-shadow(0 0 8px rgba(139,92,246,0.5));
+}
+.drop-text {
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.5;
+}
+
+/* File Upload Success */
+.file-success {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    padding: 8px 16px;
+    border-radius: 8px;
+    box-shadow: 0 0 15px rgba(139, 92, 246, 0.1);
+}
+.file-name {
+    font-size: 12px;
+    color: #c084fc;
+    font-weight: 700;
+}
+.remove-file {
+    background: transparent;
+    border: none;
+    color: #f87171;
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 12px;
+    padding: 2px;
+}
+
+/* ─── Chat Copilot Card ──────────────────────────────────────────── */
+.chat-card {
+    flex: 1;
+    min-height: 320px;
+}
+.chat-history {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 260px;
+    padding-right: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+.chat-msg {
+    display: flex;
+}
+.chat-msg--ai {
+    justify-content: flex-start;
+}
+.chat-msg--user {
+    justify-content: flex-end;
+}
+.msg-bubble {
+    max-width: 85%;
+    padding: 12px 16px;
+    border-radius: 14px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.chat-msg--ai .msg-bubble {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+    color: #e2e8f0;
+    border-top-left-radius: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.chat-msg--user .msg-bubble {
+    background: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
+    color: #ffffff;
+    border-top-right-radius: 2px;
+    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.35);
+}
+
+/* Input Row */
+.chat-input-container {
+    display: flex;
+    gap: 10px;
+    background: #0d0d12;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 4px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+    border-left: 3px solid #8b5cf6; /* Glowing left bar */
+}
+.chat-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    padding: 8px 12px;
+    font-size: 12px;
+    outline: none;
+}
+.send-btn {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+    border: none;
+    border-radius: 8px;
+    padding: 0 16px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 10px rgba(124, 58, 237, 0.3);
+}
+.send-btn:hover {
+    box-shadow: 0 6px 15px rgba(124, 58, 237, 0.5);
+    transform: scale(1.05);
+}
+
+/* ─── Preview Table & Actions ───────────────────────────────────── */
+.builder-preview {
+    display: flex;
+    flex-direction: column;
+}
+.preview-card {
+    flex: 1;
+}
+.flex-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.draft-badge {
+    background: rgba(139, 92, 246, 0.12);
+    color: #c084fc;
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+}
+.table-container {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid rgba(139, 92, 246, 0.15);
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    min-height: 280px;
+    max-height: 400px;
+    box-shadow: inset 0 4px 20px rgba(0,0,0,0.5);
+}
+.empty-table {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #64748b;
+    font-size: 13px;
+    padding: 40px;
+    text-align: center;
+}
+
+/* Draft Table */
+.draft-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.draft-table th {
+    text-align: left;
+    padding: 14px 18px;
+    background: rgba(139, 92, 246, 0.03);
+    color: #94a3b8;
+    font-weight: 700;
+    border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+    letter-spacing: 0.5px;
+}
+.draft-row {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    transition: background 0.2s;
+}
+.draft-row:hover {
+    background: rgba(139, 92, 246, 0.03);
+}
+.draft-row td {
+    padding: 14px 18px;
+    color: #e2e8f0;
+}
+.api-cell code {
+    font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+    background: rgba(244, 114, 182, 0.1);
+    color: #f472b6;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    border: 1px solid rgba(244, 114, 182, 0.15);
+}
+.type-badge {
+    background: rgba(59, 130, 246, 0.1);
+    color: #60a5fa;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    border: 1px solid rgba(59, 130, 246, 0.15);
+}
+.status-pill--draft {
+    background: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* Actions */
+.action-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.15s;
+}
+.remove-action {
+    color: #f87171;
+}
+.remove-action:hover {
+    background: rgba(248, 113, 113, 0.12);
+}
+
+/* Deploy Button */
+.preview-actions {
+    margin-top: 24px;
+    display: flex;
+    justify-content: flex-end;
+}
+.deploy-btn {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #ffffff;
+    border: none;
+    padding: 14px 28px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.35);
+    transition: all 0.25s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.deploy-btn:hover {
+    box-shadow: 0 6px 25px rgba(16, 185, 129, 0.5);
+    transform: translateY(-2px);
+}
+.deploy-btn:active {
+    transform: translateY(0);
+}
+.deploy-btn:disabled {
+    background: rgba(255, 255, 255, 0.03);
+    color: #64748b;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+    border: 1px solid rgba(255,255,255,0.03);
+}
+
+/* Spinner */
+.spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Animations */
+.animate-fadein {
+    animation: fadein 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes fadein {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}

@@ -1,0 +1,215 @@
+<template>
+<div class="dm-app">
+
+    <!-- ══ HEADER ══════════════════════════════════════════════════ -->
+    <div class="dm-header">
+        <div class="dm-brand">
+            <div class="dm-logo">⚡</div>
+            <div>
+                <div class="dm-title">Sherlock 🕵🏻‍♂️</div>
+                <div class="dm-subtitle">AI-powered Salesforce root cause analysis</div>
+            </div>
+        </div>
+        <div class="dm-status" if:true={hasSteps}>
+            <span class={statusDotClass}></span>
+            <span class="dm-status-label">{statusLabel}</span>
+        </div>
+    </div>
+
+    <!-- ══ INPUT PANEL ═════════════════════════════════════════════ -->
+    <div class={inputPanelClass}>
+        <div class="dm-input-grid">
+            <div class="dm-field">
+                <label class="dm-label">Record ID</label>
+                <input
+                    type="text"
+                    class="dm-input"
+                    placeholder="500ABC123DEF456GHI"
+                    value={recordId}
+                    onchange={handleRecordId}
+                    disabled={isLoading}
+                />
+            </div>
+            <div class="dm-field dm-field--wide">
+                <label class="dm-label">Describe the anomaly</label>
+                <input
+                    type="text"
+                    class="dm-input"
+                    placeholder="e.g. Case not assigned to Support queue, or Status changed unexpectedly..."
+                    value={anomaly}
+                    onchange={handleAnomaly}
+                    disabled={isLoading}
+                />
+            </div>
+            <button class="dm-btn" onclick={handleInvestigate} disabled={isLoading}>
+                <template if:false={isLoading}>⚡ Investigate</template>
+                <template if:true={isLoading}>
+                    <span class="dm-spinner"></span> Running...
+                </template>
+            </button>
+        </div>
+    </div>
+
+    <!-- ══ MAIN CONTENT ════════════════════════════════════════════ -->
+    <template if:true={hasSteps}>
+    <div class="dm-workspace">
+
+        <!-- LEFT: Investigation Feed -->
+        <div class="dm-feed-panel">
+            <div class="dm-panel-header">
+                <span class="dm-panel-title">Investigation Feed</span>
+                <div class="dm-conf-pill">
+                    <div class="dm-conf-bar">
+                        <div class="dm-conf-fill" style={confidenceBarStyle}></div>
+                    </div>
+                    <span class={confidenceBadgeClass}>{confidenceLabel}</span>
+                </div>
+            </div>
+            <div class="dm-feed" lwc:ref="feed">
+                <template for:each={steps} for:item="step">
+                    <div key={step.id} class={step.cssClass}>
+                        <span class="dm-step-icon">{step.icon}</span>
+                        <span class="dm-step-text">{step.text}</span>
+                    </div>
+                </template>
+                <template if:true={isLoading}>
+                    <div class="dm-step dm-step--pulse">
+                        <span class="dm-dot"></span>
+                        <span class="dm-dot"></span>
+                        <span class="dm-dot"></span>
+                        <span class="dm-step-text-dim">Analysing...</span>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Usage Footer -->
+            <template if:true={hasUsage}>
+                <div class="dm-feed-footer">
+                    <div class="dm-usage-info">
+                        <span class="dm-usage-label">Tokens:</span>
+                        <span class="dm-usage-value">{totalTokens}</span>
+                    </div>
+                    <div class="dm-usage-info">
+                        <span class="dm-usage-label">Est. Cost (USD):</span>
+                        <span class="dm-usage-value">{formattedCost}</span>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- RIGHT: RCA Report -->
+        <div class="dm-report-panel">
+            <template if:false={hasReport}>
+                <div class="dm-empty-report">
+                    <div class="dm-empty-icon">🔍</div>
+                    <div class="dm-empty-title">Investigating...</div>
+                    <div class="dm-empty-sub">Root cause analysis will appear here when complete.</div>
+                </div>
+            </template>
+
+            <template if:true={hasReport}>
+                <div class="dm-rca">
+                    <div class="dm-rca-header">
+                        <span class="dm-rca-title">Root Cause Analysis</span>
+                        <div class="dm-rca-header-right">
+                            <span class={reportBadgeClass}>{reportConfidence}% confident</span>
+                            
+                            <!-- Voting Widget -->
+                            <template if:false={hasVoted}>
+                                <div class="dm-vote-widget">
+                                    <button class="dm-vote-btn" title="Correct Analysis" onclick={handleUpvote}>👍</button>
+                                    <button class="dm-vote-btn" title="Incorrect Analysis" onclick={handleDownvote}>👎</button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Root Cause -->
+                    <div class="dm-root-card">
+                        <div class="dm-root-icon">🎯</div>
+                        <div class="dm-root-text">{rootCause}</div>
+                    </div>
+
+                    <!-- Downvote Correction Form -->
+                    <template if:true={showDownvoteForm}>
+                        <div class="dm-feedback-form">
+                            <label class="dm-feedback-label">What was the actual root cause?</label>
+                            <textarea 
+                                class="dm-feedback-textarea" 
+                                placeholder="e.g. Workflow Y was the actual trigger..." 
+                                oninput={handleFeedbackNotesChange}>
+                            </textarea>
+                            <div class="dm-feedback-actions">
+                                <button class="dm-btn dm-btn--small dm-btn--neutral" onclick={handleCancelFeedback}>Cancel</button>
+                                <button class="dm-btn dm-btn--small" onclick={submitDownvoteFeedback}>Submit</button>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Success Message -->
+                    <template if:true={submitSuccess}>
+                        <div class="dm-feedback-success">
+                            <span class="dm-success-icon">✓</span>
+                            <span>Sherlock has updated its memory with your correction.</span>
+                        </div>
+                    </template>
+
+                    <!-- Evidence -->
+                    <template if:true={evidenceItems.length}>
+                        <div class="dm-section-block">
+                            <div class="dm-block-title">Evidence</div>
+                            <template for:each={evidenceItems} for:item="ev">
+                                <div key={ev.id} class="dm-evidence">
+                                    <span class="dm-ev-dot">✓</span>
+                                    <span>{ev.text}</span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <!-- Next Steps -->
+                    <template if:true={nextStepItems.length}>
+                        <div class="dm-section-block">
+                            <div class="dm-block-title">Next Steps</div>
+                            <template for:each={nextStepItems} for:item="ns">
+                                <div key={ns.id} class="dm-next-step">
+                                    <span class="dm-step-badge">{ns.index}</span>
+                                    <span>{ns.text}</span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <!-- Ruled Out -->
+                    <template if:true={ruledOutItems.length}>
+                        <div class="dm-section-block dm-section-block--muted">
+                            <div class="dm-block-title">Ruled Out</div>
+                            <template for:each={ruledOutItems} for:item="ro">
+                                <div key={ro.id} class="dm-ruled-out">
+                                    <span class="dm-ro-icon">✗</span>
+                                    <span>{ro.text}</span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </div>
+
+    </div>
+    </template>
+
+    <!-- ══ ERROR ════════════════════════════════════════════════════ -->
+    <template if:true={hasError}>
+        <div class="dm-error">
+            <span class="dm-error-icon">⚠</span>
+            <div>
+                <div class="dm-error-title">Investigation failed</div>
+                <div class="dm-error-msg">{friendlyError}</div>
+            </div>
+            <button class="dm-retry" onclick={handleRetry}>Try again</button>
+        </div>
+    </template>
+
+</div>
+</template>

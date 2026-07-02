@@ -1,0 +1,162 @@
+<template>
+    <div class="nexora-app">
+        <!-- Header -->
+        <header class="nexora-header">
+            <div class="nexora-brand">
+                <span class="nexora-logo">🌌</span>
+                <span class="nexora-title">NEXORA</span>
+                <span class="nexora-subtitle">AI STUDIO</span>
+            </div>
+
+            <!-- Segmented Control Mode Switcher -->
+            <div class="nexora-modes">
+                <button class={builderTabClass} onclick={showBuilder}>
+                    🛠️ Builder Mode
+                </button>
+                <button class={debuggerTabClass} onclick={showDebugger}>
+                    🕵️ Debugger Mode
+                </button>
+            </div>
+
+            <div class="nexora-header-right">
+                <span class="nexora-status-pill">Active</span>
+            </div>
+        </header>
+
+        <!-- Main Body -->
+        <main class="nexora-body">
+            <!-- Builder Workspace -->
+            <template if:true={isBuilderMode}>
+                <div class="builder-layout animate-fadein">
+                    <!-- Left Control Panel: Upload & Chat -->
+                    <div class="builder-controls">
+                        <!-- File Uploader / Dropper -->
+                        <div class="panel-card dropper-card">
+                            <div class="panel-header">
+                                <h3>📂 Schema Dropper</h3>
+                                <span class="panel-subtitle">Upload CSV, Excel, or Schema Docs</span>
+                            </div>
+                            <div class={dropperAreaClass} ondragover={handleDragOver} ondragleave={handleDragLeave}
+                                ondrop={handleDrop}>
+                                <div class="drop-zone">
+                                    <span class="drop-icon">📤</span>
+                                    <template if:false={fileName}>
+                                        <p class="drop-text">Drag & drop your Excel/CSV schema sheet here, or click to
+                                            upload</p>
+                                    </template>
+                                    <template if:true={fileName}>
+                                        <div class="file-success">
+                                            <span class="file-name">{fileName}</span>
+                                            <button class="remove-file" onclick={handleRemoveFile}>✕</button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Natural Language prompt / Chat -->
+                        <div class="panel-card chat-card">
+                            <div class="panel-header">
+                                <h3>💬 Natural Language Copilot</h3>
+                                <span class="panel-subtitle">Instruct the AI what objects and fields to build</span>
+                            </div>
+                            <div class="chat-history">
+                                <template for:each={chatMessages} for:item="msg">
+                                    <div key={msg.id} class={msg.cssClass}>
+                                        <div class="msg-bubble">{msg.text}</div>
+                                    </div>
+                                </template>
+                            </div>
+                            <div class="chat-input-container">
+                                <input type="text" class="chat-input"
+                                    placeholder="e.g. Create a Project object with a Due Date field..."
+                                    value={promptInput} oninput={handlePromptInput} onkeypress={handleKeyPress} />
+                                <button class="send-btn" onclick={handleSendPrompt}>🚀</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Panel: The Preview Table & Deployment -->
+                    <div class="builder-preview">
+                        <div class="panel-card preview-card">
+                            <div class="panel-header flex-header">
+                                <div>
+                                    <h3>📋 AI Drafted Schema Preview</h3>
+                                    <span class="panel-subtitle">Review generated components before deploying to
+                                        Salesforce</span>
+                                </div>
+                                <template if:true={draftFields.length}>
+                                    <span class="draft-badge">{draftFields.length} components</span>
+                                </template>
+                            </div>
+
+                            <!-- Table -->
+                            <div class="table-container">
+                                <template if:false={draftFields.length}>
+                                    <div class="empty-table">
+                                        <span>No drafts generated yet. Upload a file or instruct the Copilot
+                                            above.</span>
+                                    </div>
+                                </template>
+                                <template if:true={draftFields.length}>
+                                    <table class="draft-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Label</th>
+                                                <th>API Name</th>
+                                                <th>Data Type</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <template for:each={draftFields} for:item="field">
+                                                <tr key={field.id} class="draft-row">
+                                                    <td>{field.label}</td>
+                                                    <td class="api-cell"><code>{field.apiName}</code></td>
+                                                    <td>
+                                                        <span class="type-badge">{field.dataType}</span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="status-pill status-pill--draft">Draft</span>
+                                                    </td>
+                                                    <td>
+                                                        <button class="action-btn remove-action" data-id={field.id}
+                                                            onclick={handleDeleteField}>
+                                                            Remove
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </template>
+                            </div>
+
+                            <!-- Deployment Action -->
+                            <div class="preview-actions">
+                                <template if:true={draftFields.length}>
+                                    <button class="deploy-btn" onclick={handleDeploySchema} disabled={isDeploying}>
+                                        <template if:false={isDeploying}>
+                                            🚀 Deploy Metadata to Salesforce Org
+                                        </template>
+                                        <template if:true={isDeploying}>
+                                            <span class="spinner"></span> Deploying...
+                                        </template>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Debugger Workspace (Imports Aditya's LWC directly) -->
+            <template if:false={isBuilderMode}>
+                <div class="debugger-layout animate-fadein">
+                    <c-dev-mind-investigate></c-dev-mind-investigate>
+                </div>
+            </template>
+        </main>
+    </div>
+</template>
