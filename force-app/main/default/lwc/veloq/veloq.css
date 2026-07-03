@@ -180,10 +180,8 @@
     z-index: 1;
 }
 .builder-layout {
-    display: grid;
-    grid-template-columns: 400px 1fr;
-    gap: 28px;
     flex: 1;
+    width: 100%;
 }
 .debugger-layout {
     flex: 1;

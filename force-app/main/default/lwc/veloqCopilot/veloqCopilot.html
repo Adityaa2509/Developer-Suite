@@ -1,0 +1,820 @@
+<template>
+    <div class="copilot-container">
+        <!-- Header -->
+        <div class="copilot-header">
+            <div class="header-info">
+                <span class="bot-icon">🤖</span>
+                <div class="title-details">
+                    <h2>Veloq AI Copilot</h2>
+                    <p class="status-subtitle">
+                        <span class={statusClass}></span> {statusText}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Feed Area -->
+        <div class="copilot-feed">
+            <template for:each={messages} for:item="msg">
+                <div key={msg.id} class="message-wrapper">
+                    <div class={msg.bubbleClass}>
+                        <div class="avatar-cell" if:true={msg.sender}>
+                            <span if:true={msg.isBot} class="avatar bot-avatar">🤖</span>
+                        </div>
+                        <div class="bubble-content">
+                            <p class="message-text">{msg.text}</p>
+                            
+                            <!-- Interactive Quick Actions (Path C Confirmation Gate) -->
+                            <template if:true={msg.isConfirmation}>
+                                <div class="confirmation-gate-buttons">
+                                    <button 
+                                        class="btn btn-sm btn-primary btn-confirm-yes" 
+                                        onclick={handleConfirmClick} 
+                                        data-val={msg.confirmVal}>
+                                        Approve
+                                    </button>
+                                    <button 
+                                        class="btn btn-sm btn-outline btn-confirm-no" 
+                                        onclick={handleConfirmClick} 
+                                        data-val="NO">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Interactive Cards (HITL & Reports) -->
+                    <template if:true={msg.isCard}>
+                        <!-- 1. Schema Review Card (HITL) -->
+                        <div key={msg.id} if:true={msg.isSchemaReview} class="card schema-card">
+                            <div class="card-header">
+                                <h3>📋 Proposed Salesforce Schema</h3>
+                            </div>
+                            <div class="card-body">
+                                <template for:each={msg.cardData.objects} for:item="obj">
+                                    <div key={obj.apiName} class="object-section">
+                                        <!-- Editable Object Header -->
+                                        <div class="object-rename-container">
+                                            <div class="rename-field">
+                                                <label>Object Label</label>
+                                                <input 
+                                                    type="text" 
+                                                    class="table-input object-rename-input" 
+                                                    value={obj.label} 
+                                                    data-msgid={msg.id}
+                                                    data-objname={obj.apiName}
+                                                    data-prop="label"
+                                                    onchange={handleSchemaObjectChange}/>
+                                            </div>
+                                            <div class="rename-field">
+                                                <label>Object API Name</label>
+                                                <input 
+                                                    type="text" 
+                                                    class="table-input object-rename-input" 
+                                                    value={obj.apiName} 
+                                                    data-msgid={msg.id}
+                                                    data-objname={obj.apiName}
+                                                    data-prop="apiName"
+                                                    onchange={handleSchemaObjectChange}/>
+                                            </div>
+                                        </div>
+                                        <p class="desc">{obj.description}</p>
+                                        
+                                        <!-- Interactive Fields Editor -->
+                                        <table class="card-table schema-edit-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Field Label</th>
+                                                    <th>API Name</th>
+                                                    <th>Type</th>
+                                                    <th>Req?</th>
+                                                    <th>Field Config / Picklist Values</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template for:each={obj.fields} for:item="f">
+                                                    <tr key={f.apiName}>
+                                                        <!-- Label Input -->
+                                                        <td>
+                                                            <input 
+                                                                type="text" 
+                                                                class="table-input" 
+                                                                value={f.label} 
+                                                                data-msgid={msg.id}
+                                                                data-objname={obj.apiName}
+                                                                data-fieldname={f.apiName}
+                                                                data-prop="label"
+                                                                onchange={handleSchemaFieldChange}/>
+                                                        </td>
+                                                        
+                                                        <!-- API Name Input -->
+                                                        <td>
+                                                            <input 
+                                                                type="text" 
+                                                                class="table-input" 
+                                                                value={f.apiName} 
+                                                                data-msgid={msg.id}
+                                                                data-objname={obj.apiName}
+                                                                data-fieldname={f.apiName}
+                                                                data-prop="apiName"
+                                                                onchange={handleSchemaFieldChange}/>
+                                                        </td>
+                                                        
+                                                        <!-- Type Select Dropdown -->
+                                                        <td>
+                                                            <select 
+                                                                class="table-select"
+                                                                data-msgid={msg.id}
+                                                                data-objname={obj.apiName}
+                                                                data-fieldname={f.apiName}
+                                                                data-prop="type"
+                                                                onchange={handleSchemaFieldChange}>
+                                                                <option value="Text" selected={f.isText}>Text</option>
+                                                                <option value="Number" selected={f.isNumber}>Number</option>
+                                                                <option value="Date" selected={f.isDate}>Date</option>
+                                                                <option value="Checkbox" selected={f.isCheckbox}>Checkbox</option>
+                                                                <option value="Picklist" selected={f.isPicklist}>Picklist</option>
+                                                                <option value="Email" selected={f.isEmail}>Email</option>
+                                                                <option value="Phone" selected={f.isPhone}>Phone</option>
+                                                            </select>
+                                                        </td>
+                                                        
+                                                        <!-- Required Checkbox -->
+                                                        <td class="text-center">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={f.required}
+                                                                data-msgid={msg.id}
+                                                                data-objname={obj.apiName}
+                                                                data-fieldname={f.apiName}
+                                                                data-prop="required"
+                                                                onchange={handleSchemaFieldChange}/>
+                                                        </td>
+                                                        
+                                                        <!-- Options configuration -->
+                                                        <td>
+                                                            <!-- Text Config: Length -->
+                                                            <template if:true={f.isText}>
+                                                                <div class="config-row">
+                                                                    <span class="lbl-cfg">Length:</span>
+                                                                    <input 
+                                                                        type="number" 
+                                                                        class="cfg-input-num" 
+                                                                        value={f.length}
+                                                                        data-msgid={msg.id}
+                                                                        data-objname={obj.apiName}
+                                                                        data-fieldname={f.apiName}
+                                                                        data-prop="length"
+                                                                        onchange={handleSchemaFieldChange}/>
+                                                                </div>
+                                                            </template>
+                                                            
+                                                            <!-- Checkbox Config: Default Value -->
+                                                            <template if:true={f.isCheckbox}>
+                                                                <div class="config-row">
+                                                                    <span class="lbl-cfg">Default:</span>
+                                                                    <select 
+                                                                        class="cfg-select-bool"
+                                                                        data-msgid={msg.id}
+                                                                        data-objname={obj.apiName}
+                                                                        data-fieldname={f.apiName}
+                                                                        data-prop="defaultValue"
+                                                                        onchange={handleSchemaFieldChange}>
+                                                                        <option value="false" selected={f.isDefaultFalse}>False</option>
+                                                                        <option value="true" selected={f.isDefaultTrue}>True</option>
+                                                                    </select>
+                                                                </div>
+                                                            </template>
+                                                            
+                                                            <!-- Picklist Config: Interactive Pill Editor -->
+                                                            <template if:true={f.isPicklist}>
+                                                                <div class="picklist-ui-container">
+                                                                    <div class="picklist-pills">
+                                                                        <template for:each={f.picklistValuesList} for:item="val">
+                                                                            <span key={val} class="picklist-pill">
+                                                                                {val}
+                                                                                <button 
+                                                                                    class="btn-remove-pill"
+                                                                                    data-msgid={msg.id}
+                                                                                    data-objname={obj.apiName}
+                                                                                    data-fieldname={f.apiName}
+                                                                                    data-val={val}
+                                                                                    onclick={handleRemovePicklistValue}>×</button>
+                                                                            </span>
+                                                                        </template>
+                                                                    </div>
+                                                                    <div class="picklist-add-row">
+                                                                        <input 
+                                                                            type="text" 
+                                                                            class="cfg-input-text picklist-add-input"
+                                                                            placeholder="Add value..."
+                                                                            data-inputfield={f.apiName}
+                                                                            onkeypress={handlePicklistInputKeyPress}/>
+                                                                        <button 
+                                                                            class="btn-add-pill"
+                                                                            data-msgid={msg.id}
+                                                                            data-objname={obj.apiName}
+                                                                            data-fieldname={f.apiName}
+                                                                            onclick={handleAddPicklistValue}>Add</button>
+                                                                    </div>
+                                                                </div>
+                                                            </template>
+                                                        </td>
+                                                        
+                                                        <!-- Field Delete Action -->
+                                                        <td class="text-center">
+                                                            <button 
+                                                                class="btn-delete-rule" 
+                                                                data-msgid={msg.id}
+                                                                data-objname={obj.apiName}
+                                                                data-fieldname={f.apiName}
+                                                                onclick={handleRemoveCustomField}
+                                                                title="Delete Field">×</button>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                        
+                                        <div class="fields-actions-row">
+                                            <button 
+                                                class="btn btn-outline btn-sm btn-add-field" 
+                                                data-msgid={msg.id} 
+                                                data-objname={obj.apiName} 
+                                                onclick={handleAddCustomField}>➕ Add Custom Field</button>
+                                        </div>
+ 
+                                        <!-- Validation Rules List -->
+                                        <div class="validation-rules-section">
+                                            <h4>🛡️ Suggested Validation Rules</h4>
+                                            
+                                            <template if:true={obj.validationRules.length}>
+                                                <ul class="validation-rules-list">
+                                                    <template for:each={obj.validationRules} for:item="rule">
+                                                        <li key={rule.name} class="validation-rule-item">
+                                                            <div class="rule-header">
+                                                                <div class="rule-edit-inputs">
+                                                                    <div class="rule-field-row">
+                                                                        <span class="rule-label-lbl">Rule Name:</span>
+                                                                        <input 
+                                                                            type="text" 
+                                                                            class="table-input rule-name-input"
+                                                                            value={rule.name}
+                                                                            data-msgid={msg.id}
+                                                                            data-objname={obj.apiName}
+                                                                            data-rulename={rule.name}
+                                                                            data-prop="name"
+                                                                            onchange={handleSchemaRuleChange}/>
+                                                                    </div>
+                                                                </div>
+                                                                <button 
+                                                                    class="btn-delete-rule" 
+                                                                    data-msgid={msg.id}
+                                                                    data-objname={obj.apiName}
+                                                                    data-rulename={rule.name}
+                                                                    onclick={handleRemoveValidationRule}>×</button>
+                                                            </div>
+                                                            <div class="rule-details-edit">
+                                                                <div class="rule-field-row font-code">
+                                                                    <span class="rule-label-lbl">Formula:</span>
+                                                                    <div class="formula-input-wrapper">
+                                                                        <input 
+                                                                            type="text" 
+                                                                            class="table-input rule-formula-input"
+                                                                            value={rule.formula}
+                                                                            data-msgid={msg.id}
+                                                                            data-objname={obj.apiName}
+                                                                            data-rulename={rule.name}
+                                                                            data-prop="formula"
+                                                                            onchange={handleSchemaRuleChange}/>
+                                                                        <button 
+                                                                            class="btn btn-outline btn-sm btn-check-syntax"
+                                                                            data-msgid={msg.id}
+                                                                            data-objname={obj.apiName}
+                                                                            data-rulename={rule.name}
+                                                                            onclick={handleCheckFormulaSyntax}>Check Syntax</button>
+                                                                    </div>
+                                                                </div>
+                                                                
+                                                                <!-- Syntax check status output -->
+                                                                <template if:true={rule.syntaxStatus}>
+                                                                    <div class="syntax-status-msg">{rule.syntaxStatus}</div>
+                                                                </template>
+                                                                
+                                                                <div class="rule-field-row font-italic">
+                                                                    <span class="rule-label-lbl">Error Msg:</span>
+                                                                    <input 
+                                                                        type="text" 
+                                                                        class="table-input rule-error-input"
+                                                                        value={rule.errorMessage}
+                                                                        data-msgid={msg.id}
+                                                                        data-objname={obj.apiName}
+                                                                        data-rulename={rule.name}
+                                                                        data-prop="errorMessage"
+                                                                        onchange={handleSchemaRuleChange}/>
+                                                                </div>
+                                                            </div>
+                                                        </li>
+                                                    </template>
+                                                </ul>
+                                            </template>
+                                            
+                                            <div class="rules-actions-row">
+                                                <button 
+                                                    class="btn btn-outline btn-sm btn-add-rule" 
+                                                    data-msgid={msg.id} 
+                                                    data-objname={obj.apiName} 
+                                                    onclick={handleAddValidationRule}>➕ Add Validation Rule</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                            
+                            <div class="card-footer">
+                                <template if:false={msg.cardData.isDeployed}>
+                                    <button 
+                                        class="btn btn-primary" 
+                                        onclick={handleDeploySchemaClick} 
+                                        data-msgid={msg.id} 
+                                        data-schema={msg.cardData.schemaString}
+                                        disabled={msg.cardData.deploying}>
+                                        <template if:true={msg.cardData.deploying}>Deploying...</template>
+                                        <template if:false={msg.cardData.deploying}>Deploy Metadata to Org</template>
+                                    </button>
+                                </template>
+                                
+                                <template if:true={msg.cardData.isDeployed}>
+                                    <div class={msg.cardData.deployClass}>
+                                        <div class="deploy-result-message">
+                                            <span class="emoji">{msg.cardData.emoji}</span> {msg.cardData.resultMessage}
+                                        </div>
+                                        
+                                        <!-- Successfully Created Components -->
+                                        <template if:true={msg.cardData.created.length}>
+                                            <div class="deploy-sub-section">
+                                                <div class="deploy-sub-header text-success">🎉 Successfully Created Components:</div>
+                                                <ul class="deploy-components-list">
+                                                    <template for:each={msg.cardData.created} for:item="item">
+                                                        <li key={item} class="deploy-component-item success-item">✓ {item}</li>
+                                                    </template>
+                                                </ul>
+                                            </div>
+                                        </template>
+
+                                        <!-- Already Present Components -->
+                                        <template if:true={msg.cardData.alreadyPresent.length}>
+                                            <div class="deploy-sub-section">
+                                                <div class="deploy-sub-header text-info">ℹ️ Already Present in Org:</div>
+                                                <ul class="deploy-components-list">
+                                                    <template for:each={msg.cardData.alreadyPresent} for:item="item">
+                                                        <li key={item} class="deploy-component-item info-item">✓ {item} (Already Existed)</li>
+                                                    </template>
+                                                </ul>
+                                            </div>
+                                        </template>
+
+                                        <!-- Failed Components -->
+                                        <template if:true={msg.cardData.deployErrors.length}>
+                                            <div class="deploy-sub-section">
+                                                <div class="deploy-sub-header text-danger">⚠️ Failed Components:</div>
+                                                <ul class="deploy-errors-list">
+                                                    <template for:each={msg.cardData.deployErrors} for:item="err">
+                                                        <li key={err} class="deploy-error-item">❌ {err}</li>
+                                                    </template>
+                                                </ul>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Conflict Resolver Card (HITL) -->
+                        <div key={msg.id} if:true={msg.isConflictResolver} class="card conflict-card">
+                            <div class="card-header conflict-header">
+                                <h3>⚠️ Object Conflict Detected</h3>
+                            </div>
+                            <div class="card-body">
+                                <p class="conflict-desc">
+                                    The Custom Object <strong>{msg.cardData.objectLabel} ({msg.cardData.objectApiName})</strong> already exists in your Salesforce org.
+                                </p>
+                                <p class="conflict-question">How would you like to proceed?</p>
+                                
+                                <div class="conflict-actions">
+                                    <button 
+                                        class="btn btn-secondary conflict-btn" 
+                                        onclick={handleConflictRename} 
+                                        data-msgid={msg.cardData.msgId}>
+                                        ✏️ Rename Object
+                                    </button>
+                                    <button 
+                                        class="btn btn-outline conflict-btn" 
+                                        onclick={handleConflictAppendBoth} 
+                                        data-msgid={msg.cardData.msgId} 
+                                        data-schema={msg.cardData.schemaString}
+                                        disabled={msg.cardData.deploying}>
+                                        ➕ Add Fields & Validation Rules
+                                    </button>
+                                    <button 
+                                        class="btn btn-outline conflict-btn" 
+                                        onclick={handleConflictAppendFields} 
+                                        data-msgid={msg.cardData.msgId} 
+                                        data-schema={msg.cardData.schemaString}
+                                        disabled={msg.cardData.deploying}>
+                                        📝 Add Fields Only
+                                    </button>
+                                    <button 
+                                        class="btn btn-outline conflict-btn" 
+                                        onclick={handleConflictAppendRules} 
+                                        data-msgid={msg.cardData.msgId} 
+                                        data-schema={msg.cardData.schemaString}
+                                        disabled={msg.cardData.deploying}>
+                                        🛡️ Add Validation Rules Only
+                                    </button>
+                                </div>
+                                
+                                <template if:true={msg.cardData.isDeployed}>
+                                    <div class={msg.cardData.deployClass}>
+                                        <div class="deploy-result-message">
+                                            <span class="emoji">{msg.cardData.emoji}</span> {msg.cardData.resultMessage}
+                                        </div>
+                                        <template if:true={msg.cardData.deployErrors.length}>
+                                            <ul class="deploy-errors-list">
+                                                <template for:each={msg.cardData.deployErrors} for:item="err">
+                                                    <li key={err} class="deploy-error-item">⚠️ {err}</li>
+                                                </template>
+                                            </ul>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- 2. CSV Header Mapper Card (HITL) -->
+                        <div key={msg.id} if:true={msg.isFieldMapper} class="card mapping-card">
+                            <div class="card-header">
+                                <h3>🗺️ Field Alignment (Target: {msg.cardData.objectName})</h3>
+                            </div>
+                            <div class="card-body">
+                                <table class="card-table">
+                                    <thead>
+                                        <tr>
+                                            <th>CSV Header</th>
+                                            <th>Salesforce Target Field</th>
+                                            <th>Match</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template for:each={msg.cardData.headers} for:item="h">
+                                            <tr key={h.id}>
+                                                <td><strong>{h.name}</strong></td>
+                                                <td>
+                                                    <select 
+                                                        class="select-field"
+                                                        data-header={h.name} 
+                                                        data-msgid={msg.id} 
+                                                        onchange={handleFieldMappingChange}>
+                                                        <option value="">-- Ignore / Skip --</option>
+                                                        <template for:each={h.availableFields} for:item="f">
+                                                            <option key={f.value} value={f.value} selected={f.isSelected}>{f.label}</option>
+                                                        </template>
+                                                    </select>
+                                                </td>
+                                                <td>
+                                                    <span class="badge badge-conf">{h.confidence}%</span>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div class="card-footer mapping-actions">
+                                <button 
+                                    class="btn btn-primary" 
+                                    onclick={handleExecuteImport} 
+                                    data-msgid={msg.id} 
+                                    data-objname={msg.cardData.objectName}
+                                    data-csvdata={msg.cardData.csvData}
+                                    data-operation="insert"
+                                    disabled={msg.cardData.importing}>
+                                    ✔️ Insert Records
+                                </button>
+                                <button 
+                                    class="btn btn-secondary" 
+                                    onclick={handleExecuteImport} 
+                                    data-msgid={msg.id} 
+                                    data-objname={msg.cardData.objectName}
+                                    data-csvdata={msg.cardData.csvData}
+                                    data-operation="update"
+                                    disabled={msg.cardData.importing}>
+                                    🔄 Update Records
+                                </button>
+                                <button 
+                                    class="btn btn-danger" 
+                                    onclick={handleExecuteImport} 
+                                    data-msgid={msg.id} 
+                                    data-objname={msg.cardData.objectName}
+                                    data-csvdata={msg.cardData.csvData}
+                                    data-operation="delete"
+                                    disabled={msg.cardData.importing}>
+                                    ❌ Delete Records
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 3. Import Results Report Card -->
+                        <div key={msg.id} if:true={msg.isImportReport} class="card report-card">
+                            <div class="card-header">
+                                <h3>📊 DML Execution Report ({msg.cardData.operation})</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="stats-grid">
+                                    <div class="stat-box success-box">
+                                        <div class="val">{msg.cardData.successCount}</div>
+                                        <div class="lbl">Succeeded</div>
+                                    </div>
+                                    <div class="stat-box error-box">
+                                        <div class="val">{msg.cardData.failureCount}</div>
+                                        <div class="lbl">Failed</div>
+                                    </div>
+                                </div>
+
+                                <template if:true={msg.cardData.hasErrors}>
+                                    <div class="error-log-section">
+                                        <h4>⚠️ Failure Reasons Details:</h4>
+                                        <div class="scroll-log">
+                                            <ul>
+                                                <template for:each={msg.cardData.errors} for:item="err">
+                                                    <li key={err.row}>
+                                                        <strong>Row {err.row}:</strong> {err.message}
+                                                    </li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- 4. Sherlock Investigation Progress & RCA Card -->
+                        <div key={msg.id} if:true={msg.isInvestigationReport} class="card debug-card">
+                            <div class="card-header">
+                                <div class="header-row">
+                                    <h3>🕵️ Sherlock RCA Report</h3>
+                                    <span class="status-pill">{msg.cardData.status}</span>
+                                </div>
+                            </div>
+                            
+                            <div class="card-body">
+                                <!-- Steps Log -->
+                                <div class="steps-log">
+                                    <template for:each={msg.cardData.steps} for:item="step">
+                                        <div key={step.step_number} class="step-line">
+                                            <span class="step-icon">→</span>
+                                            <span class="step-text">{step.message}</span>
+                                        </div>
+                                    </template>
+                                </div>
+
+                                <!-- RCA Result Section (when complete) -->
+                                <template if:true={msg.cardData.rootCause}>
+                                    <div class="rca-findings">
+                                        <div class="metric-row">
+                                            <strong>Confidence Score:</strong>
+                                            <span class="badge-conf">{msg.cardData.confidence}%</span>
+                                        </div>
+                                        
+                                        <div class="finding-block rca-block">
+                                            <h4>Root Cause Analysis:</h4>
+                                            <p>{msg.cardData.rootCause}</p>
+                                        </div>
+
+                                        <template if:true={msg.cardData.evidenceItems.length}>
+                                            <div class="finding-block">
+                                                <h4>Supporting Evidence:</h4>
+                                                <ul>
+                                                    <template for:each={msg.cardData.evidenceItems} for:item="ev">
+                                                        <li key={ev}>{ev}</li>
+                                                    </template>
+                                                </ul>
+                                            </div>
+                                        </template>
+
+                                        <template if:true={msg.cardData.nextStepItems.length}>
+                                            <div class="finding-block">
+                                                <h4>Recommended Fixes:</h4>
+                                                <ul>
+                                                    <template for:each={msg.cardData.nextStepItems} for:item="ns">
+                                                        <li key={ns}>{ns}</li>
+                                                    </template>
+                                                </ul>
+                                            </div>
+                                        </template>
+                                    </div>
+
+                                    <!-- Feedback loop (HITL correction) -->
+                                    <div class="feedback-panel" if:true={msg.cardData.feedbackAllowed}>
+                                        <template if:false={msg.cardData.hasVoted}>
+                                            <p class="feedback-title">Was this analysis accurate?</p>
+                                            <div class="feedback-actions">
+                                                <button 
+                                                    class="btn btn-thumb" 
+                                                    onclick={handleThumbsUp} 
+                                                    data-jobid={msg.cardData.jobId} 
+                                                    data-msgid={msg.id}>
+                                                    👍 Yes, Accurate
+                                                </button>
+                                                <button 
+                                                    class="btn btn-thumb btn-thumb-down" 
+                                                    onclick={handleThumbsDown} 
+                                                    data-msgid={msg.id}>
+                                                    👎 No, Incorrect
+                                                </button>
+                                            </div>
+
+                                            <template if:true={msg.cardData.showCorrectionInput}>
+                                                <div class="correction-form">
+                                                    <label>Please enter the true root cause to help me learn:</label>
+                                                    <textarea 
+                                                        class="txt-correction" 
+                                                        data-inputid={msg.id} 
+                                                        placeholder="Describe what automations or fields actually caused the issue..."></textarea>
+                                                    <button 
+                                                        class="btn btn-primary" 
+                                                        onclick={handleCorrectionSubmit} 
+                                                        data-jobid={msg.cardData.jobId} 
+                                                        data-msgid={msg.id}>
+                                                        Submit Correction
+                                                    </button>
+                                                </div>
+                                            </template>
+                                        </template>
+
+                                        <template if:true={msg.cardData.hasVoted}>
+                                            <div class="feedback-thanks">
+                                                ✓ Thank you for your feedback! The system has logged this correction.
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- 5. Permission Diagnostic Chain Card -->
+                        <div key={msg.id} if:true={msg.isPermissionsDiagnostic} class="card diagnostic-card">
+                            <div class="card-header diagnostic-header">
+                                <h3>🔍 Salesforce Access Diagnostics</h3>
+                                <span class="verdict-pill badge-conf">{msg.cardData.verdict}</span>
+                            </div>
+                            <div class="card-body">
+                                <p class="diagnostic-reply"><strong>Summary:</strong> {msg.cardData.reply}</p>
+                                
+                                <div class="diagnostic-steps-container">
+                                    <template for:each={msg.cardData.chain} for:item="step">
+                                        <div key={step.layer} class="diagnostic-step-row">
+                                            <span class={step.statusClass}>{step.icon}</span>
+                                            <div class="step-info">
+                                                <div class="step-layer-name">{step.layer}</div>
+                                                <div class="step-detail">{step.detail}</div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+
+                                <div class="finding-block rca-block" if:true={msg.cardData.rootCause}>
+                                    <h4>Root Cause:</h4>
+                                    <p>{msg.cardData.rootCause}</p>
+                                </div>
+
+                                <div class="finding-block fix-block" if:true={msg.cardData.fix}>
+                                    <h4>Remediation Fix:</h4>
+                                    <p>{msg.cardData.fix}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 6. Permission Bulk Audit Card -->
+                        <div key={msg.id} if:true={msg.isPermissionsAudit} class="card audit-card">
+                            <div class="card-header audit-header">
+                                <h3>📊 Salesforce Security Audit Report</h3>
+                            </div>
+                            <div class="card-body">
+                                <template if:true={msg.cardData.hasTable}>
+                                    <div class="table-container">
+                                        <table class="card-table">
+                                            <thead>
+                                                <tr>
+                                                    <template for:each={msg.cardData.headers} for:item="h">
+                                                        <th key={h}>{h}</th>
+                                                    </template>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template for:each={msg.cardData.rows} for:item="row">
+                                                    <tr key={row.id}>
+                                                        <template for:each={row.cells} for:item="cell">
+                                                            <td key={cell}>{cell}</td>
+                                                        </template>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </template>
+
+                                <div class="audit-note-section" if:true={msg.cardData.note}>
+                                    <p class="audit-note"><strong>Audit Notice:</strong> {msg.cardData.note}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Loading Spinner in Feed -->
+            <div if:true={isLoading} class="chat-loading">
+                <span class="spinner-circle"></span> Processing request...
+            </div>
+        </div>
+
+        <!-- File Action Selector Modal -->
+        <template if:true={showFileModeSelector}>
+            <div class="modal-overlay">
+                <div class="modal-content">
+                    <h3>📎 File Upload Action</h3>
+                    <p class="modal-desc">What would you like to do with the uploaded file <strong>{fileName}</strong>?</p>
+                    <div class="file-action-buttons">
+                        <button class="btn btn-primary" onclick={handleFileImportMode}>
+                            📥 Import CSV Data
+                        </button>
+                        <button class="btn btn-secondary" onclick={handleFileSchemaMode}>
+                            🛠️ Create Metadata Schema
+                        </button>
+                    </div>
+                    <button class="btn btn-tertiary modal-close" onclick={cancelFileModeSelection}>Cancel</button>
+                </div>
+            </div>
+        </template>
+
+        <!-- Target Object Selector Popover/Drop-down Overlay -->
+        <template if:true={showObjectSelector}>
+            <div class="modal-overlay">
+                <div class="modal-content">
+                    <h3>Select Salesforce SObject</h3>
+                    <p class="modal-desc">Select the target object for CSV import:</p>
+                    <div class="search-input-wrapper">
+                        <input 
+                            type="text" 
+                            class="search-input" 
+                            placeholder="Search object, e.g. Lead, Invoice__c..." 
+                            value={objectSearchKey}
+                            oninput={handleObjectSearchInput}/>
+                    </div>
+                    <div class="dropdown-list">
+                        <template for:each={filteredObjects} for:item="obj">
+                            <div 
+                                key={obj.value} 
+                                class="dropdown-item" 
+                                onclick={handleSelectObject} 
+                                data-value={obj.value}>
+                                {obj.label} (<code>{obj.value}</code>)
+                            </div>
+                        </template>
+                    </div>
+                    <button class="btn btn-secondary modal-close" onclick={closeObjectSelector}>Cancel</button>
+                </div>
+            </div>
+        </template>
+
+        <!-- Input Bar Panel -->
+        <div class="copilot-input-panel">
+            <!-- Hidden File Input for CSV/PDF/Image upload -->
+            <input 
+                type="file" 
+                class="hidden-file-input" 
+                accept=".csv,.pdf,.png,.jpg,.jpeg"
+                onchange={handleFileChange}/>
+            
+            <button class="btn-attach" onclick={triggerFileSelect} title="Attach CSV, PDF, or Image">
+                📎
+            </button>
+            
+            <input 
+                type="text" 
+                class="chat-input" 
+                placeholder="Ask Veloq Copilot a question, or type record ID to debug..." 
+                value={inputVal} 
+                oninput={handleInputChange} 
+                onkeypress={handleInputKeyPress}
+                disabled={isLoading}/>
+                
+            <button class="btn-send" onclick={handleSend} disabled={isLoading} title="Send Message">
+                ➔
+            </button>
+        </div>
+    </div>
+</template>

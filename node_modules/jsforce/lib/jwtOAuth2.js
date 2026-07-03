@@ -1,0 +1,26 @@
+"use strict";
+
+var _interopRequireDefault = require("@babel/runtime-corejs3/helpers/interopRequireDefault");
+var _Object$defineProperty = require("@babel/runtime-corejs3/core-js-stable/object/define-property");
+_Object$defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.JwtOAuth2 = void 0;
+var _oauth = _interopRequireDefault(require("./oauth2"));
+/**
+ * @deprecated
+ */
+class JwtOAuth2 extends _oauth.default {
+  constructor(config) {
+    console.warn('JwtOAuth2 is deprecated and will be removed in next stable release, please use OAuth2 instead.');
+    super(config);
+  }
+  jwtAuthorize(innerToken) {
+    return super._postParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: innerToken
+    });
+  }
+}
+exports.JwtOAuth2 = JwtOAuth2;
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJfb2F1dGgiLCJfaW50ZXJvcFJlcXVpcmVEZWZhdWx0IiwicmVxdWlyZSIsIkp3dE9BdXRoMiIsIk9BdXRoMiIsImNvbnN0cnVjdG9yIiwiY29uZmlnIiwiY29uc29sZSIsIndhcm4iLCJqd3RBdXRob3JpemUiLCJpbm5lclRva2VuIiwiX3Bvc3RQYXJhbXMiLCJncmFudF90eXBlIiwiYXNzZXJ0aW9uIiwiZXhwb3J0cyJdLCJzb3VyY2VzIjpbIi4uL3NyYy9qd3RPQXV0aDIudHMiXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IE9BdXRoMiwgeyBPQXV0aDJDb25maWcgfSBmcm9tICcuL29hdXRoMic7XG5cbi8qKlxuICogQGRlcHJlY2F0ZWRcbiAqL1xuZXhwb3J0IGNsYXNzIEp3dE9BdXRoMiBleHRlbmRzIE9BdXRoMiB7XG4gIGNvbnN0cnVjdG9yKGNvbmZpZzogT0F1dGgyQ29uZmlnKSB7XG4gICAgY29uc29sZS53YXJuKFxuICAgICAgJ0p3dE9BdXRoMiBpcyBkZXByZWNhdGVkIGFuZCB3aWxsIGJlIHJlbW92ZWQgaW4gbmV4dCBzdGFibGUgcmVsZWFzZSwgcGxlYXNlIHVzZSBPQXV0aDIgaW5zdGVhZC4nLFxuICAgICk7XG4gICAgc3VwZXIoY29uZmlnKTtcbiAgfVxuXG4gIHB1YmxpYyBqd3RBdXRob3JpemUoaW5uZXJUb2tlbjogc3RyaW5nKTogUHJvbWlzZTxhbnk+IHtcbiAgICByZXR1cm4gc3VwZXIuX3Bvc3RQYXJhbXMoe1xuICAgICAgZ3JhbnRfdHlwZTogJ3VybjppZXRmOnBhcmFtczpvYXV0aDpncmFudC10eXBlOmp3dC1iZWFyZXInLFxuICAgICAgYXNzZXJ0aW9uOiBpbm5lclRva2VuLFxuICAgIH0pO1xuICB9XG59XG4iXSwibWFwcGluZ3MiOiI7Ozs7Ozs7O0FBQUEsSUFBQUEsTUFBQSxHQUFBQyxzQkFBQSxDQUFBQyxPQUFBO0FBRUE7QUFDQTtBQUNBO0FBQ08sTUFBTUMsU0FBUyxTQUFTQyxjQUFNLENBQUM7RUFDcENDLFdBQVdBLENBQUNDLE1BQW9CLEVBQUU7SUFDaENDLE9BQU8sQ0FBQ0MsSUFBSSxDQUNWLGdHQUNGLENBQUM7SUFDRCxLQUFLLENBQUNGLE1BQU0sQ0FBQztFQUNmO0VBRU9HLFlBQVlBLENBQUNDLFVBQWtCLEVBQWdCO0lBQ3BELE9BQU8sS0FBSyxDQUFDQyxXQUFXLENBQUM7TUFDdkJDLFVBQVUsRUFBRSw2Q0FBNkM7TUFDekRDLFNBQVMsRUFBRUg7SUFDYixDQUFDLENBQUM7RUFDSjtBQUNGO0FBQUNJLE9BQUEsQ0FBQVgsU0FBQSxHQUFBQSxTQUFBIn0=

@@ -1,0 +1,187 @@
+<template>
+    <div class="agent-wrapper">
+        <!-- Compact Step Bar -->
+        <div class="step-bar">
+            <div class={step1Class}>
+                <span class="step-circle">1</span>
+                <span class="step-label">Configure Input</span>
+            </div>
+            <div class="step-line"></div>
+            <div class={step2Class}>
+                <span class="step-circle">2</span>
+                <span class="step-label">AI Schema Preview</span>
+            </div>
+            <div class="step-line"></div>
+            <div class={step3Class}>
+                <span class="step-circle">3</span>
+                <span class="step-label">Deployment Result</span>
+            </div>
+        </div>
+
+        <div class="agent-body">
+            <!-- STEP 1: INPUT MODES -->
+            <template if:true={showUpload}>
+                <!-- Mode Toggle Segmented Controller -->
+                <div class="input-mode-selector">
+                    <button class={fileModeClass} onclick={setFileInputMode}>
+                        📂 Upload Document
+                    </button>
+                    <button class={promptModeClass} onclick={setPromptInputMode}>
+                        ✨ Describe with Prompt
+                    </button>
+                </div>
+
+                <!-- File Uploader View -->
+                <template if:true={isFileMode}>
+                    <div class="section-card upload-card animate-fadein">
+                        <div class="upload-zone">
+                            <div class="upload-animation">📤</div>
+                            <div class="upload-text">Drag & drop your schema sheet here, or click to browse</div>
+                            <div class="upload-hint">PDF · DOCX · TXT</div>
+                            <input type="file" accept=".pdf,.docx,.txt" onchange={handleFileChange} class="upload-input" />
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Prompt Input View -->
+                <template if:true={isPromptMode}>
+                    <div class="section-card prompt-card animate-fadein">
+                        <textarea
+                            class="custom-textarea"
+                            placeholder="Describe your schema, e.g.: Create a Milestone object with status picklist, target date, and related Project lookup..."
+                            maxlength="5000"
+                            rows="4"
+                            value={promptText}
+                            oninput={handlePromptChange}>
+                        </textarea>
+                        <div class="slds-m-top_small text-right">
+                            <button class="ai-btn" onclick={handlePromptSubmit} disabled={isLoading}>
+                                🚀 Analyze with AI
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Loader -->
+                <template if:true={isLoading}>
+                    <div class="loading-box animate-fadein">
+                        <div class="loading-dots"><span></span><span></span><span></span></div>
+                        <p class="loading-text">✨ Gemini is analyzing your requirements...</p>
+                    </div>
+                </template>
+            </template>
+
+            <!-- STEP 2: PREVIEW -->
+            <template if:true={showPreview}>
+                <div class="preview-banner animate-fadein">
+                    <span>🔍</span> Verify the detected objects & fields before deploying
+                </div>
+
+                <!-- Scrollable container to lock height on one screen -->
+                <div class="preview-scroll-container animate-fadein">
+                    <template for:each={parsedObjects} for:item="obj">
+                        <div key={obj.apiName} class="object-card">
+                            <div class="object-card-header">
+                                <span class="object-badge">📦 Object</span>
+                                <span class="object-name">{obj.label}</span>
+                                <span class="object-api">{obj.apiName}</span>
+                            </div>
+                            <template if:true={obj.description}>
+                                <p class="object-desc">💬 {obj.description}</p>
+                            </template>
+                            
+                            <!-- Custom Lightweight HTML Table to save space and match dark theme -->
+                            <div class="table-wrapper">
+                                <table class="custom-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Field Label</th>
+                                            <th>API Name</th>
+                                            <th>Type</th>
+                                            <th>Req</th>
+                                            <th>Picklist Values</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template for:each={obj.fields} for:item="f">
+                                            <tr key={f.apiName}>
+                                                <td class="bold-td">{f.label}</td>
+                                                <td class="api-td"><code>{f.apiName}</code></td>
+                                                <td><span class="type-pill">{f.type}</span></td>
+                                                <td>{f.required}</td>
+                                                <td class="picklist-td">{f.picklistDisplay}</td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Validations -->
+                            <template if:true={obj.hasValidations}>
+                                <div class="validation-section">
+                                    <div class="fields-label">🔒 Validation Rules</div>
+                                    <template for:each={obj.validationRules} for:item="vr">
+                                        <div key={vr.name} class="validation-row">
+                                            <span class="vr-name">{vr.name}</span>
+                                            <span class="vr-msg">{vr.errorMessage}</span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="action-bar animate-fadein">
+                    <button class="deploy-btn" onclick={handleDeploy} disabled={isLoading}>
+                        🚀 Deploy to Salesforce
+                    </button>
+                    <button class="reset-btn" onclick={handleReset}>
+                        🔄 Cancel
+                    </button>
+                </div>
+
+                <template if:true={isLoading}>
+                    <div class="loading-box animate-fadein">
+                        <div class="loading-dots"><span></span><span></span><span></span></div>
+                        <p class="loading-text">🚀 Deploying schema metadata to your Salesforce Org...</p>
+                    </div>
+                </template>
+            </template>
+
+            <!-- STEP 3: RESULT -->
+            <template if:true={showResult}>
+                <div class={resultBoxClass}>
+                    <div class="result-emoji">{resultEmoji}</div>
+                    <div class="result-message">{resultMessage}</div>
+                    
+                    <div class="results-scroll-container">
+                        <template if:true={deployCreated}>
+                            <div class="created-list">
+                                <div class="created-list-title">✅ Created Components</div>
+                                <template for:each={deployCreated} for:item="item">
+                                    <div key={item} class="created-item">✔ {item}</div>
+                                </template>
+                            </div>
+                        </template>
+                        
+                        <template if:true={deployErrors}>
+                            <div class="error-list">
+                                <div class="error-list-title">⚠️ Errors / Warnings</div>
+                                <template for:each={deployErrors} for:item="err">
+                                    <div key={err} class="error-item">✖ {err}</div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="action-bar slds-m-top_medium animate-fadein">
+                    <button class="ai-btn" onclick={handleReset}>
+                        🔄 Start New Build
+                    </button>
+                </div>
+            </template>
+        </div>
+    </div>
+</template>

@@ -5,6 +5,7 @@ from app.api.routes.health import router as health_router
 from app.core.config import get_settings
 from app.core.logger import get_logger
 from app.api.routes.investigate import router as investigate_router
+from app.api.routes.copilot import router as copilot_router
 from fastapi.responses import JSONResponse
 import asyncio
 from fastapi import Request
@@ -60,3 +61,4 @@ app.add_middleware(
 
 app.include_router(health_router, prefix="/api", tags=["Health"])
 app.include_router(investigate_router, prefix="/api", tags=["Investigate"])
+app.include_router(copilot_router, prefix="/api/copilot", tags=["Copilot"])

@@ -1,0 +1,70 @@
+"use strict";
+
+var _interopRequireDefault = require("@babel/runtime-corejs3/helpers/interopRequireDefault");
+var _Object$defineProperty = require("@babel/runtime-corejs3/core-js-stable/object/define-property");
+require("core-js/modules/es.promise");
+_Object$defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = exports.QuickAction = void 0;
+var _defineProperty2 = _interopRequireDefault(require("@babel/runtime-corejs3/helpers/defineProperty"));
+/**
+ * @file Represents Salesforce QuickAction
+ * @author Shinichi Tomita <shinichi.tomita@gmail.com>
+ */
+
+/**
+ * type definitions
+ */
+
+/**
+ * A class for quick action
+ */
+class QuickAction {
+  /**
+   *
+   */
+  constructor(conn, path) {
+    (0, _defineProperty2.default)(this, "_conn", void 0);
+    (0, _defineProperty2.default)(this, "_path", void 0);
+    this._conn = conn;
+    this._path = path;
+  }
+
+  /**
+   * Describe the action's information (including layout, etc.)
+   */
+  async describe() {
+    const url = `${this._path}/describe`;
+    const body = await this._conn.request(url);
+    return body;
+  }
+
+  /**
+   * Retrieve default field values in the action (for given record, if specified)
+   */
+  async defaultValues(contextId) {
+    let url = `${this._path}/defaultValues`;
+    if (contextId) {
+      url += `/${contextId}`;
+    }
+    const body = await this._conn.request(url);
+    return body;
+  }
+
+  /**
+   * Execute the action for given context Id and record information
+   */
+  async execute(contextId, record) {
+    const requestBody = {
+      contextId,
+      record
+    };
+    const resBody = await this._conn.requestPost(this._path, requestBody);
+    return resBody;
+  }
+}
+exports.QuickAction = QuickAction;
+var _default = QuickAction;
+exports.default = _default;
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJRdWlja0FjdGlvbiIsImNvbnN0cnVjdG9yIiwiY29ubiIsInBhdGgiLCJfZGVmaW5lUHJvcGVydHkyIiwiZGVmYXVsdCIsIl9jb25uIiwiX3BhdGgiLCJkZXNjcmliZSIsInVybCIsImJvZHkiLCJyZXF1ZXN0IiwiZGVmYXVsdFZhbHVlcyIsImNvbnRleHRJZCIsImV4ZWN1dGUiLCJyZWNvcmQiLCJyZXF1ZXN0Qm9keSIsInJlc0JvZHkiLCJyZXF1ZXN0UG9zdCIsImV4cG9ydHMiLCJfZGVmYXVsdCJdLCJzb3VyY2VzIjpbIi4uL3NyYy9xdWljay1hY3Rpb24udHMiXSwic291cmNlc0NvbnRlbnQiOlsiLyoqXG4gKiBAZmlsZSBSZXByZXNlbnRzIFNhbGVzZm9yY2UgUXVpY2tBY3Rpb25cbiAqIEBhdXRob3IgU2hpbmljaGkgVG9taXRhIDxzaGluaWNoaS50b21pdGFAZ21haWwuY29tPlxuICovXG5pbXBvcnQgQ29ubmVjdGlvbiBmcm9tICcuL2Nvbm5lY3Rpb24nO1xuaW1wb3J0IHtcbiAgRGVzY3JpYmVRdWlja0FjdGlvbkRldGFpbFJlc3VsdCxcbiAgUmVjb3JkLFxuICBPcHRpb25hbCxcbiAgU2NoZW1hLFxufSBmcm9tICcuL3R5cGVzJztcblxuLyoqXG4gKiB0eXBlIGRlZmluaXRpb25zXG4gKi9cbmV4cG9ydCB0eXBlIFF1aWNrQWN0aW9uRGVmYXVsdFZhbHVlcyA9IHsgW25hbWU6IHN0cmluZ106IGFueSB9O1xuXG5leHBvcnQgdHlwZSBRdWlja0FjdGlvblJlc3VsdCA9IHtcbiAgaWQ6IHN0cmluZztcbiAgZmVlZEl0ZW1JZHM6IE9wdGlvbmFsPHN0cmluZ1tdPjtcbiAgc3VjY2VzczogYm9vbGVhbjtcbiAgY3JlYXRlZDogYm9vbGVhbjtcbiAgY29udGV4dElkOiBzdHJpbmc7XG4gIGVycm9yczogT2JqZWN0W107XG59O1xuXG4vKipcbiAqIEEgY2xhc3MgZm9yIHF1aWNrIGFjdGlvblxuICovXG5leHBvcnQgY2xhc3MgUXVpY2tBY3Rpb248UyBleHRlbmRzIFNjaGVtYT4ge1xuICBfY29ubjogQ29ubmVjdGlvbjxTPjtcbiAgX3BhdGg6IHN0cmluZztcblxuICAvKipcbiAgICpcbiAgICovXG4gIGNvbnN0cnVjdG9yKGNvbm46IENvbm5lY3Rpb248Uz4sIHBhdGg6IHN0cmluZykge1xuICAgIHRoaXMuX2Nvbm4gPSBjb25uO1xuICAgIHRoaXMuX3BhdGggPSBwYXRoO1xuICB9XG5cbiAgLyoqXG4gICAqIERlc2NyaWJlIHRoZSBhY3Rpb24ncyBpbmZvcm1hdGlvbiAoaW5jbHVkaW5nIGxheW91dCwgZXRjLilcbiAgICovXG4gIGFzeW5jIGRlc2NyaWJlKCk6IFByb21pc2U8RGVzY3JpYmVRdWlja0FjdGlvbkRldGFpbFJlc3VsdD4ge1xuICAgIGNvbnN0IHVybCA9IGAke3RoaXMuX3BhdGh9L2Rlc2NyaWJlYDtcbiAgICBjb25zdCBib2R5ID0gYXdhaXQgdGhpcy5fY29ubi5yZXF1ZXN0KHVybCk7XG4gICAgcmV0dXJuIGJvZHkgYXMgRGVzY3JpYmVRdWlja0FjdGlvbkRldGFpbFJlc3VsdDtcbiAgfVxuXG4gIC8qKlxuICAgKiBSZXRyaWV2ZSBkZWZhdWx0IGZpZWxkIHZhbHVlcyBpbiB0aGUgYWN0aW9uIChmb3IgZ2l2ZW4gcmVjb3JkLCBpZiBzcGVjaWZpZWQpXG4gICAqL1xuICBhc3luYyBkZWZhdWx0VmFsdWVzKGNvbnRleHRJZD86IHN0cmluZyk6IFByb21pc2U8UXVpY2tBY3Rpb25EZWZhdWx0VmFsdWVzPiB7XG4gICAgbGV0IHVybCA9IGAke3RoaXMuX3BhdGh9L2RlZmF1bHRWYWx1ZXNgO1xuICAgIGlmIChjb250ZXh0SWQpIHtcbiAgICAgIHVybCArPSBgLyR7Y29udGV4dElkfWA7XG4gICAgfVxuICAgIGNvbnN0IGJvZHkgPSBhd2FpdCB0aGlzLl9jb25uLnJlcXVlc3QodXJsKTtcbiAgICByZXR1cm4gYm9keSBhcyBRdWlja0FjdGlvbkRlZmF1bHRWYWx1ZXM7XG4gIH1cblxuICAvKipcbiAgICogRXhlY3V0ZSB0aGUgYWN0aW9uIGZvciBnaXZlbiBjb250ZXh0IElkIGFuZCByZWNvcmQgaW5mb3JtYXRpb25cbiAgICovXG4gIGFzeW5jIGV4ZWN1dGUoY29udGV4dElkOiBzdHJpbmcsIHJlY29yZDogUmVjb3JkKTogUHJvbWlzZTxRdWlja0FjdGlvblJlc3VsdD4ge1xuICAgIGNvbnN0IHJlcXVlc3RCb2R5ID0geyBjb250ZXh0SWQsIHJlY29yZCB9O1xuICAgIGNvbnN0IHJlc0JvZHkgPSBhd2FpdCB0aGlzLl9jb25uLnJlcXVlc3RQb3N0KHRoaXMuX3BhdGgsIHJlcXVlc3RCb2R5KTtcbiAgICByZXR1cm4gcmVzQm9keSBhcyBRdWlja0FjdGlvblJlc3VsdDtcbiAgfVxufVxuXG5leHBvcnQgZGVmYXVsdCBRdWlja0FjdGlvbjtcbiJdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7OztBQUFBO0FBQ0E7QUFDQTtBQUNBOztBQVNBO0FBQ0E7QUFDQTs7QUFZQTtBQUNBO0FBQ0E7QUFDTyxNQUFNQSxXQUFXLENBQW1CO0VBSXpDO0FBQ0Y7QUFDQTtFQUNFQyxXQUFXQSxDQUFDQyxJQUFtQixFQUFFQyxJQUFZLEVBQUU7SUFBQSxJQUFBQyxnQkFBQSxDQUFBQyxPQUFBO0lBQUEsSUFBQUQsZ0JBQUEsQ0FBQUMsT0FBQTtJQUM3QyxJQUFJLENBQUNDLEtBQUssR0FBR0osSUFBSTtJQUNqQixJQUFJLENBQUNLLEtBQUssR0FBR0osSUFBSTtFQUNuQjs7RUFFQTtBQUNGO0FBQ0E7RUFDRSxNQUFNSyxRQUFRQSxDQUFBLEVBQTZDO0lBQ3pELE1BQU1DLEdBQUcsR0FBSSxHQUFFLElBQUksQ0FBQ0YsS0FBTSxXQUFVO0lBQ3BDLE1BQU1HLElBQUksR0FBRyxNQUFNLElBQUksQ0FBQ0osS0FBSyxDQUFDSyxPQUFPLENBQUNGLEdBQUcsQ0FBQztJQUMxQyxPQUFPQyxJQUFJO0VBQ2I7O0VBRUE7QUFDRjtBQUNBO0VBQ0UsTUFBTUUsYUFBYUEsQ0FBQ0MsU0FBa0IsRUFBcUM7SUFDekUsSUFBSUosR0FBRyxHQUFJLEdBQUUsSUFBSSxDQUFDRixLQUFNLGdCQUFlO0lBQ3ZDLElBQUlNLFNBQVMsRUFBRTtNQUNiSixHQUFHLElBQUssSUFBR0ksU0FBVSxFQUFDO0lBQ3hCO0lBQ0EsTUFBTUgsSUFBSSxHQUFHLE1BQU0sSUFBSSxDQUFDSixLQUFLLENBQUNLLE9BQU8sQ0FBQ0YsR0FBRyxDQUFDO0lBQzFDLE9BQU9DLElBQUk7RUFDYjs7RUFFQTtBQUNGO0FBQ0E7RUFDRSxNQUFNSSxPQUFPQSxDQUFDRCxTQUFpQixFQUFFRSxNQUFjLEVBQThCO0lBQzNFLE1BQU1DLFdBQVcsR0FBRztNQUFFSCxTQUFTO01BQUVFO0lBQU8sQ0FBQztJQUN6QyxNQUFNRSxPQUFPLEdBQUcsTUFBTSxJQUFJLENBQUNYLEtBQUssQ0FBQ1ksV0FBVyxDQUFDLElBQUksQ0FBQ1gsS0FBSyxFQUFFUyxXQUFXLENBQUM7SUFDckUsT0FBT0MsT0FBTztFQUNoQjtBQUNGO0FBQUNFLE9BQUEsQ0FBQW5CLFdBQUEsR0FBQUEsV0FBQTtBQUFBLElBQUFvQixRQUFBLEdBRWNwQixXQUFXO0FBQUFtQixPQUFBLENBQUFkLE9BQUEsR0FBQWUsUUFBQSJ9
