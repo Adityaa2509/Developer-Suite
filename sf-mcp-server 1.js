@@ -783,6 +783,22 @@ server.tool(
       }
 
       const qualifiedField = `${obj}.${field}`;
+      
+      // Check system-wide admin overrides first (standard profiles don't write to FieldPermissions)
+      const sysPermsResult = await conn.query(`
+        SELECT PermissionsModifyAllData, PermissionsViewAllData
+        FROM   PermissionSet
+        WHERE  Id IN ('${allIds.join("','")}')
+        AND    (PermissionsModifyAllData = true OR PermissionsViewAllData = true)
+      `);
+      const hasModifyAll = sysPermsResult.records.some(r => r.PermissionsModifyAllData);
+      const hasViewAll = sysPermsResult.records.some(r => r.PermissionsViewAllData);
+
+      const fls = { 
+        read: hasModifyAll || hasViewAll, 
+        edit: hasModifyAll 
+      };
+
       const flsResult      = await conn.query(`
         SELECT Field, PermissionsRead, PermissionsEdit, ParentId
         FROM   FieldPermissions
@@ -790,7 +806,6 @@ server.tool(
         AND    ParentId IN ('${allIds.join("','")}')
       `);
 
-      const fls = { read: false, edit: false };
       for (const r of flsResult.records) {
         if (r.PermissionsRead) fls.read = true;
         if (r.PermissionsEdit) fls.edit = true;

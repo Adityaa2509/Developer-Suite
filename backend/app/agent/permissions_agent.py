@@ -369,6 +369,14 @@ def run_permissions_agent(
     - Intercepts write-tool calls and returns a confirmation card instead of executing.
     - Stores the pending write in PENDING_WRITES[session_id] for later execution.
     """
+    # Check if the user is asking to perform a write/modify action
+    access_grant_keywords = [
+        "give", "grant", "add", "provide", "allow", "enable",
+        "assign", "fix", "resolve", "update access", "create", "assign"
+    ]
+    msg_lower = user_message.lower()
+    is_write_intent = any(kw in msg_lower for kw in access_grant_keywords)
+
     client = MCPClient()
     try:
         client.start()
@@ -378,6 +386,11 @@ def run_permissions_agent(
         # Strip unsupported keys to avoid the schema warning flood
         openai_tools = []
         for tool in mcp_tools:
+            tool_name = tool["name"]
+            # Exclude write tools if user intent is not write/modify
+            if not is_write_intent and tool_name in WRITE_TOOLS:
+                continue
+
             schema = tool.get("inputSchema", {})
             clean_schema = {
                 "type": schema.get("type", "object"),
@@ -393,57 +406,57 @@ def run_permissions_agent(
                 }
             })
 
-        # Append custom pseudo-tool definition
-        openai_tools.append({
-            "type": "function",
-            "function": {
-                "name": "create_and_assign_permission_set",
-                "description": "Create a new custom minimal permission set with proper naming conventions, grant the requested field or object level access, and assign it to the user. Use ONLY when no existing permission set grants the needed access.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "userId": {
-                            "type": "string",
-                            "description": "The 18-character Salesforce User ID to assign the permission set to"
+        # Append custom pseudo-tool definition only if it's a write intent
+        if is_write_intent:
+            openai_tools.append({
+                "type": "function",
+                "function": {
+                    "name": "create_and_assign_permission_set",
+                    "description": "Create a new custom minimal permission set with proper naming conventions, grant the requested field or object level access, and assign it to the user. Use ONLY when no existing permission set grants the needed access.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "userId": {
+                                "type": "string",
+                                "description": "The 18-character Salesforce User ID to assign the permission set to"
+                            },
+                            "permissionSetName": {
+                                "type": "string",
+                                "description": "DeveloperName for the permission set following naming convention: PS_<ObjectName>_<FieldName>_Edit or PS_<ObjectName>_Edit"
+                            },
+                            "permissionSetLabel": {
+                                "type": "string",
+                                "description": "User-friendly Label for the permission set following naming convention: PS <ObjectName> <FieldName> Edit or PS <ObjectName> Edit"
+                            },
+                            "objectType": {
+                                "type": "string",
+                                "description": "Salesforce Object API Name (e.g. Account, Custom_Object__c)"
+                            },
+                            "fieldName": {
+                                "type": "string",
+                                "description": "Salesforce Field API Name (e.g. SLAExpirationDate__c). Omit or leave empty for object-level permission sets."
+                            },
+                            "accessType": {
+                                "type": "string",
+                                "enum": ["read", "edit"],
+                                "description": "The level of access to grant (read or edit)"
+                            }
                         },
-                        "permissionSetName": {
-                            "type": "string",
-                            "description": "DeveloperName for the permission set following naming convention: PS_<ObjectName>_<FieldName>_Edit or PS_<ObjectName>_Edit"
-                        },
-                        "permissionSetLabel": {
-                            "type": "string",
-                            "description": "User-friendly Label for the permission set following naming convention: PS <ObjectName> <FieldName> Edit or PS <ObjectName> Edit"
-                        },
-                        "objectType": {
-                            "type": "string",
-                            "description": "Salesforce Object API Name (e.g. Account, Custom_Object__c)"
-                        },
-                        "fieldName": {
-                            "type": "string",
-                            "description": "Salesforce Field API Name (e.g. SLAExpirationDate__c). Omit or leave empty for object-level permission sets."
-                        },
-                        "accessType": {
-                            "type": "string",
-                            "enum": ["read", "edit"],
-                            "description": "The level of access to grant (read or edit)"
-                        }
-                    },
-                    "required": ["userId", "permissionSetName", "permissionSetLabel", "objectType", "accessType"]
+                        "required": ["userId", "permissionSetName", "permissionSetLabel", "objectType", "accessType"]
+                    }
                 }
-            }
-        })
+            })
 
         llm = get_llm_with_fallbacks(tools=openai_tools)
         system_content = get_permissions_system_prompt()
 
         # ── Pre-fetch perm sets if message seems like a vague access grant ──
-        access_grant_keywords = [
+        access_grant_keywords_prefetch = [
             "give", "grant", "add", "provide", "allow", "enable",
             "assign", "fix", "resolve", "update access"
         ]
-        msg_lower = user_message.lower()
         perm_set_context = ""
-        if any(kw in msg_lower for kw in access_grant_keywords):
+        if any(kw in msg_lower for kw in access_grant_keywords_prefetch):
             import re as _re
 
             # Pass 1: find the field (any __c token)
@@ -501,6 +514,7 @@ def run_permissions_agent(
             "\n\nInstructions Reminder:\n"
             "- First classify this request into Path A, B, C, or D.\n"
             "- You MUST call sf_get_user_identity first to search for and obtain the actual userId from Salesforce. Do NOT guess, assume, or make up any record or user IDs.\n"
+            "- If it is Path B (Diagnostic), you MUST ALWAYS verify the user's actual permissions first using sf_explain_access_grant or sf_get_field_security. Do NOT assume a user lacks permissions just because their question asks why they cannot access a field/object.\n"
             "- If it is Path B (Diagnostic), you MUST return ONLY a valid JSON object — no markdown fences, no prose. "
             "The JSON must have exactly these top-level keys: 'verdict' (one of: allowed/denied/partial/error), "
             "'reply' (a short conversational explanation), 'rootCause' (technical reason), 'fix' (remediation step), "
@@ -546,6 +560,26 @@ def run_permissions_agent(
 
                     # ── WRITE-TOOL INTERCEPT ───────────────────────────────
                     if tool_name in WRITE_TOOLS:
+                        # Check for placeholder userId or arguments
+                        has_placeholder = False
+                        placeholder_reason = ""
+                        
+                        user_id_val = args.get("userId")
+                        if user_id_val:
+                            if not re.match(r"^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$", str(user_id_val)):
+                                has_placeholder = True
+                                placeholder_reason = f"Error: The userId '{user_id_val}' is not a valid 15-character or 18-character Salesforce ID. You must resolve the correct user ID using sf_get_user_identity first, then pass the actual ID."
+
+                        for k, v in args.items():
+                            if isinstance(v, str) and ("placeholder" in v.lower() or "resolved_user_id" in v.lower() or "unresolved" in v.lower()):
+                                has_placeholder = True
+                                placeholder_reason = f"Error: The parameter '{k}' has a placeholder value '{v}'. You must resolve and replace all placeholders with actual values before calling this tool."
+
+                        if has_placeholder:
+                            logger.info(f"Write tool {tool_name} contains placeholder: {placeholder_reason}")
+                            messages.append(ToolMessage(content=placeholder_reason, tool_call_id=call_id))
+                            continue
+
                         logger.info(f"Intercepting write tool: {tool_name} — storing pending write and returning confirmation card.")
                         if session_id:
                             PENDING_WRITES[session_id] = {
