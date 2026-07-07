@@ -105,13 +105,32 @@ Use this exact JSON format:
             temperature=0.1,
             convert_system_message_to_human=True,
         )
-        gemini_fallback = ChatGoogleGenerativeAI(
+        
+        fallbacks = []
+        if s.GEMINI_API_KEY_FALLBACK:
+            fallbacks.append(ChatGoogleGenerativeAI(
+                model=s.GEMINI_MODEL_PRIMARY,
+                google_api_key=s.GEMINI_API_KEY_FALLBACK,
+                temperature=0.1,
+                convert_system_message_to_human=True,
+            ))
+            
+        fallbacks.append(ChatGoogleGenerativeAI(
             model=s.GEMINI_MODEL_FALLBACK,
             google_api_key=s.GEMINI_API_KEY,
             temperature=0.1,
             convert_system_message_to_human=True,
-        )
-        llm = gemini_primary.with_fallbacks([gemini_fallback])
+        ))
+        
+        if s.GEMINI_API_KEY_FALLBACK:
+            fallbacks.append(ChatGoogleGenerativeAI(
+                model=s.GEMINI_MODEL_FALLBACK,
+                google_api_key=s.GEMINI_API_KEY_FALLBACK,
+                temperature=0.1,
+                convert_system_message_to_human=True,
+            ))
+            
+        llm = gemini_primary.with_fallbacks(fallbacks)
     else:
         llm = get_llm_with_fallbacks()
 

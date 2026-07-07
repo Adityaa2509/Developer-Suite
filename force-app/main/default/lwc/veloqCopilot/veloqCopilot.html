@@ -15,14 +15,16 @@
 
         <!-- Chat Feed Area -->
         <div class="copilot-feed">
-            <template for:each={messages} for:item="msg">
+            <template for:each={formattedMessages} for:item="msg">
                 <div key={msg.id} class="message-wrapper">
                     <div class={msg.bubbleClass}>
                         <div class="avatar-cell" if:true={msg.sender}>
                             <span if:true={msg.isBot} class="avatar bot-avatar">🤖</span>
                         </div>
                         <div class="bubble-content">
-                            <p class="message-text">{msg.text}</p>
+                            <p class="message-text">
+                                <lightning-formatted-rich-text value={msg.formattedText}></lightning-formatted-rich-text>
+                            </p>
                             
                             <!-- Interactive Quick Actions (Path C Confirmation Gate) -->
                             <template if:true={msg.isConfirmation}>

@@ -30,7 +30,11 @@ logger = get_logger(__name__)
 def get_llm_with_fallbacks(tools: list | None = None) -> BaseChatModel:
     """
     Returns LLM with fallback chain and retry logic.
-    Groq (Key 1) → Groq (Key 2) → Gemini Primary (Key 1) → Gemini Primary (Key 2) → Gemini Fallback
+    Groq (Key 1) → Groq (Key 2) → Gemini Primary (Key 1) → Gemini Primary (Key 2) → Gemini Fallback (Key 1) → Gemini Fallback (Key 2)
+
+    Groq is primary because Gemini free-tier keys share a per-project daily quota
+    that exhausts quickly. Groq has generous limits and sub-second response times.
+    Gemini is kept in fallback so it's used automatically when its quota resets.
     """
     s = get_settings()
 
@@ -80,6 +84,16 @@ def get_llm_with_fallbacks(tools: list | None = None) -> BaseChatModel:
         max_retries=2,
     ))
 
+    # 5. Fallback to Gemini Fallback Model with fallback key if available
+    if s.GEMINI_API_KEY_FALLBACK:
+        fallbacks.append(ChatGoogleGenerativeAI(
+            model=s.GEMINI_MODEL_FALLBACK,
+            google_api_key=s.GEMINI_API_KEY_FALLBACK,
+            temperature=0.1,
+            convert_system_message_to_human=True,
+            max_retries=2,
+        ))
+
     if tools:
         primary = primary.bind_tools(tools)
         fallbacks = [m.bind_tools(tools) for m in fallbacks]
@@ -90,6 +104,7 @@ def get_llm_with_fallbacks(tools: list | None = None) -> BaseChatModel:
         + f"→ {s.GEMINI_MODEL_PRIMARY} (Gemini Primary)"
         + (" → Gemini Primary AltKey" if s.GEMINI_API_KEY_FALLBACK else "")
         + f" → {s.GEMINI_MODEL_FALLBACK} (Gemini Fallback)"
+        + (" → Gemini Fallback AltKey" if s.GEMINI_API_KEY_FALLBACK else "")
     )
 
     return primary.with_fallbacks(
@@ -151,12 +166,23 @@ def get_reporter_llm() -> BaseChatModel:
         max_retries=2,
     ))
 
+    # 5. Fallback to Gemini Fallback Model with fallback key if available
+    if s.GEMINI_API_KEY_FALLBACK:
+        fallbacks.append(ChatGoogleGenerativeAI(
+            model=s.GEMINI_MODEL_FALLBACK,
+            google_api_key=s.GEMINI_API_KEY_FALLBACK,
+            temperature=0.0,
+            convert_system_message_to_human=True,
+            max_retries=2,
+        ))
+
     logger.info(
         f"Reporter chain: {s.GROQ_MODEL} "
         + ("→ GROQ_FALLBACK " if s.GROQ_API_KEY_FALLBACK else "")
         + f"→ {s.GEMINI_MODEL_PRIMARY} (Gemini Primary)"
         + (" → Gemini Primary AltKey" if s.GEMINI_API_KEY_FALLBACK else "")
         + f" → {s.GEMINI_MODEL_FALLBACK} (Gemini Fallback)"
+        + (" → Gemini Fallback AltKey" if s.GEMINI_API_KEY_FALLBACK else "")
     )
 
     return primary.with_fallbacks(

@@ -19,7 +19,12 @@ from app.salesforce.data_loader import (
 )
 from app.agent.runner import run_investigation_background
 from app.tools.record import detect_object_type
-from app.agent.permissions_agent import run_permissions_agent, execute_pending_write, PENDING_WRITES
+from app.agent.permissions_agent import (
+    run_permissions_agent,
+    run_permissions_background,
+    execute_pending_write,
+    PENDING_WRITES
+)
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -161,21 +166,36 @@ Return ONLY a single word from: DEBUG, CREATE, PERMISSIONS, CHAT. No formatting,
             }
         except Exception as e:
             logger.error(f"Error generating schema: {e}")
+            err_msg = str(e)
+            user_hint = ""
+            if "RESOURCE_EXHAUSTED" in err_msg or "429" in err_msg:
+                user_hint = (
+                    "\n\n💡 **Tip:** It looks like Gemini's free tier rate limit was exceeded. "
+                    "Since Groq Llama 3.3 is currently 100% active and healthy, you can avoid this by "
+                    "copy-pasting the text requirements directly into the chat, or uploading them "
+                    "as a plain text file (.txt, .csv, .json, .yaml, etc.) instead of a PDF/image."
+                )
             return {
                 "action": "CHAT",
-                "message": f"I tried to construct a schema from your requirements but ran into an error: {e}"
+                "message": f"I tried to construct a schema from your requirements but ran into an error: {e}{user_hint}"
             }
             
     elif "PERMISSIONS" in intent:
-        try:
-            res = run_permissions_agent(message, req.running_user_id, session_id=session_id)
-            return res
-        except Exception as e:
-            logger.error(f"Error in permissions agent execution: {e}")
-            return {
-                "action": "CHAT",
-                "message": f"I ran into an issue while checking permissions: {e}"
-            }
+        # Run as a background task — returns immediately with a job_id
+        # LWC polls GET /api/permissions/status/{job_id} until complete
+        job_id = str(uuid.uuid4())
+        background_tasks.add_task(
+            run_permissions_background,
+            job_id=job_id,
+            user_message=message,
+            running_user_id=req.running_user_id,
+            session_id=session_id
+        )
+        return {
+            "action": "PERMISSIONS_LOADING",
+            "job_id": job_id,
+            "message": "🔍 Analysing Salesforce permissions..."
+        }
             
     else:
         # Conversational Chat fallback

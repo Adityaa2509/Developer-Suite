@@ -122,6 +122,32 @@ public with sharing class VeloqCopilotController {
     }
 
     /**
+     * @description Polls the status of a background permissions agent job.
+     *              Called by LWC every 3 seconds after receiving PERMISSIONS_LOADING.
+     */
+    @AuraEnabled
+    public static String pollPermissionsStatus(String jobId) {
+        try {
+            HttpRequest req = new HttpRequest();
+            req.setEndpoint(BASE_URL + '/api/permissions/status/' + jobId);
+            req.setMethod('GET');
+            req.setTimeout(10000);
+            Http http = new Http();
+            HttpResponse res = http.send(req);
+            if (res.getStatusCode() == 200) {
+                return res.getBody();
+            } else {
+                handleResponseError(res, 'Permissions poll');
+                return null;
+            }
+        } catch (AuraHandledException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AuraHandledException('Permissions poll failed: ' + e.getMessage());
+        }
+    }
+
+    /**
      * @description Uploads base64 encoded CSV contents to retrieve fuzzy header mappings.
      */
     @AuraEnabled

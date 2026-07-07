@@ -6,9 +6,7 @@ from app.core.config import get_settings
 from app.core.logger import get_logger
 from app.api.routes.investigate import router as investigate_router
 from app.api.routes.copilot import router as copilot_router
-from fastapi.responses import JSONResponse
-import asyncio
-from fastapi import Request
+from app.api.routes.permissions import router as permissions_router
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -41,15 +39,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-@app.middleware("http")
-async def timeout_middleware(request: Request, call_next):
-    try:
-        return await asyncio.wait_for(call_next(request), timeout=25.0)
-    except asyncio.TimeoutError:
-        return JSONResponse(
-            status_code=408,
-            content={"detail": "Request timed out. Investigation is still running — keep polling."}
-        )
 
 app.add_middleware(
     CORSMiddleware,
@@ -62,3 +51,4 @@ app.add_middleware(
 app.include_router(health_router, prefix="/api", tags=["Health"])
 app.include_router(investigate_router, prefix="/api", tags=["Investigate"])
 app.include_router(copilot_router, prefix="/api/copilot", tags=["Copilot"])
+app.include_router(permissions_router, prefix="/api", tags=["Permissions"])

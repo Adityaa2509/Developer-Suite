@@ -10,6 +10,7 @@ import checkValidationFormula from '@salesforce/apex/VeloqCopilotController.chec
 import getTargetObjects from '@salesforce/apex/VeloqCopilotController.getTargetObjects';
 import pollInvestigationSteps from '@salesforce/apex/DevMindController.pollInvestigationSteps';
 import saveFeedback from '@salesforce/apex/DevMindController.saveFeedback';
+import pollPermissionsStatus from '@salesforce/apex/VeloqCopilotController.pollPermissionsStatus';
 
 const POLL_INTERVAL = 3000;
 
@@ -155,6 +156,62 @@ export default class VeloqCopilot extends LightningElement {
 
     closeObjectSelector() {
         this.showObjectSelector = false;
+    }
+
+    get formattedMessages() {
+        return this.messages.map(msg => {
+            return {
+                ...msg,
+                formattedText: this.formatMarkdown(msg.text)
+            };
+        });
+    }
+
+    formatMarkdown(text) {
+        if (!text) return '';
+        let html = text;
+        
+        // 1. Escape HTML
+        html = html
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+            
+        // 2. Bold: **text** -> <strong>text</strong>
+        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        
+        // 3. Bullets
+        html = html.split('\n').map(line => {
+            let trimmed = line.trim();
+            if (trimmed.startsWith('•') || trimmed.startsWith('*') || trimmed.startsWith('-')) {
+                let content = trimmed.substring(1).trim();
+                return `&bull; ${content}`;
+            }
+            return line;
+        }).join('\n');
+        
+        // 4. Inline code
+        html = html.replace(/`([^`]+)`/g, '<code style="background: rgba(14, 165, 233, 0.15); color: #0ea5e9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; font-weight: bold;">$1</code>');
+        
+        // 5. Line breaks
+        html = html.replace(/\n/g, '<br/>');
+        
+        // 6. Styled Alerts (⚠️, 💡, ℹ️)
+        html = html.split('<br/>').map(line => {
+            let trimmed = line.trim();
+            if (trimmed.startsWith('⚠️')) {
+                return `<div style="background: rgba(239, 68, 68, 0.08); border-left: 3px solid #ef4444; padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 13px; color: #f87171;">${trimmed}</div>`;
+            }
+            if (trimmed.startsWith('💡')) {
+                return `<div style="background: rgba(14, 165, 233, 0.08); border-left: 3px solid #0ea5e9; padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 13px; color: #38bdf8;">${trimmed}</div>`;
+            }
+            if (trimmed.startsWith('ℹ️')) {
+                return `<div style="background: rgba(168, 85, 247, 0.08); border-left: 3px solid #a855f7; padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 13px; color: #c084fc;">${trimmed}</div>`;
+            }
+            return line;
+        }).join('<br/>');
+        
+        return html;
     }
 
     // Conversational send
@@ -348,6 +405,26 @@ export default class VeloqCopilot extends LightningElement {
             this.injectSchemaReviewCard(res.message, sanitizedSchema);
         }
 
+        else if (res.action === 'PERMISSIONS_LOADING') {
+            // Background job started — show spinner message and begin polling
+            const botMsgId = 'perm_loading_' + Date.now();
+            this.messages = [
+                ...this.messages,
+                {
+                    id: botMsgId,
+                    sender: 'bot',
+                    isBot: true,
+                    text: res.message || '🔍 Analysing Salesforce permissions…',
+                    isCard: false,
+                    bubbleClass: 'message-bubble-row bot',
+                    isConfirmation: false
+                }
+            ];
+            this._activePermJobId = res.job_id;
+            this._activePermMsgId = botMsgId;
+            this.startPermissionsPolling(botMsgId, res.job_id);
+        }
+
         else if (res.action === 'PERMISSIONS_CONFIRM') {
             // Path C: Write-tool intercepted — show Approve/Cancel gate buttons
             this.messages = [
@@ -439,6 +516,40 @@ export default class VeloqCopilot extends LightningElement {
                     clearInterval(this._activePollInterval);
                     this._activePollInterval = null;
                     this.showToast('Polling Error', 'Failed to retrieve investigation progress', 'error');
+                });
+        }, POLL_INTERVAL);
+    }
+
+    // Permissions Agent Asynchronous Polling loop
+    startPermissionsPolling(loadingMsgId, jobId) {
+        if (this._activePermPollInterval) {
+            clearInterval(this._activePermPollInterval);
+        }
+
+        this._activePermPollInterval = setInterval(() => {
+            pollPermissionsStatus({ jobId: jobId })
+                .then(rawStr => {
+                    const job = typeof rawStr === 'string' ? JSON.parse(rawStr) : rawStr;
+                    if (job.status === 'complete' || job.status === 'failed') {
+                        clearInterval(this._activePermPollInterval);
+                        this._activePermPollInterval = null;
+                        // Remove the loading spinner bubble
+                        this.messages = this.messages.filter(m => m.id !== loadingMsgId);
+                        this.isLoading = false;
+                        // Route the result through the normal response handler
+                        if (job.result) {
+                            this.handleRouterResponse(job.result);
+                        } else {
+                            this.appendBotMessage('⚠️ Permissions analysis returned no result.');
+                        }
+                    }
+                })
+                .catch(e => {
+                    clearInterval(this._activePermPollInterval);
+                    this._activePermPollInterval = null;
+                    this.isLoading = false;
+                    this.messages = this.messages.filter(m => m.id !== loadingMsgId);
+                    this.appendBotMessage('❌ Error polling permissions status: ' + (e.body?.message || e.message));
                 });
         }, POLL_INTERVAL);
     }

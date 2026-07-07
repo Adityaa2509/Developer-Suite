@@ -38,7 +38,8 @@ WRITE_TOOLS = {
     "sf_update_field_security",
     "sf_update_apex_class_access",
     "sf_change_user_profile",
-    "sf_manage_record_sharing"
+    "sf_manage_record_sharing",
+    "create_and_assign_permission_set"
 }
 
 # ── Human-readable label map for confirmation cards ───────────────
@@ -49,7 +50,8 @@ WRITE_TOOL_LABELS = {
     "sf_update_field_security": "Update Field-Level Security",
     "sf_update_apex_class_access": "Update Apex Class Access",
     "sf_change_user_profile": "Change User Profile",
-    "sf_manage_record_sharing": "Manage Record Sharing"
+    "sf_manage_record_sharing": "Manage Record Sharing",
+    "create_and_assign_permission_set": "Create & Assign Permission Set"
 }
 
 SYSTEM_PROMPT = None
@@ -98,32 +100,263 @@ def _build_confirm_card(tool_name: str, args: Dict[str, Any], context: str = "")
     }
 
 
-def _find_permsets_for_field(field_api_name: str, object_type: str) -> list:
+def _analyze_and_find_minimal_permset(
+    object_type: str,
+    field_api_name: Optional[str] = None,
+    required_access: str = "edit"
+) -> Optional[Dict[str, Any]]:
     """
-    Fast SOQL lookup: find permission sets (non-profile) that grant
-    Edit access to the specified field, so the LLM doesn't need a discovery turn.
-    Returns a list of PermissionSet DeveloperNames (max 5).
+    Finds all non-profile permission sets in the org that grant the requested access.
+    Queries their system permissions, object permission counts, and field permission counts.
+    Returns a dictionary containing:
+      - 'candidates': list of candidate details
+      - 'recommended': the recommended candidate with minimal extra permissions
+      - 'proposal': a string description of why the recommended candidate was chosen and its complications.
+      - 'create_proposal': if no permission sets exist, contains naming and parameter details for creating a new one.
     """
     try:
         from app.salesforce.client import get_sf_client
         sf = get_sf_client()
-        # FieldPermissions stores per-perm-set FLS; filter to Edit=true, non-profile perm sets
-        soql = (
-            f"SELECT Parent.Name, Parent.Label "
-            f"FROM FieldPermissions "
-            f"WHERE SObjectType = '{object_type}' "
-            f"AND Field = '{object_type}.{field_api_name}' "
-            f"AND PermissionsEdit = true "
-            f"AND Parent.IsOwnedByProfile = false "
-            f"LIMIT 5"
-        )
+        
+        perm_field = "PermissionsEdit" if required_access == "edit" else "PermissionsRead"
+        if field_api_name:
+            soql = (
+                f"SELECT ParentId, Parent.Name, Parent.Label "
+                f"FROM FieldPermissions "
+                f"WHERE SObjectType = '{object_type}' "
+                f"AND Field = '{object_type}.{field_api_name}' "
+                f"AND {perm_field} = true "
+                f"AND Parent.IsOwnedByProfile = false"
+            )
+        else:
+            soql = (
+                f"SELECT ParentId, Parent.Name, Parent.Label "
+                f"FROM ObjectPermissions "
+                f"WHERE SObjectType = '{object_type}' "
+                f"AND {perm_field} = true "
+                f"AND Parent.IsOwnedByProfile = false"
+            )
+            
         res = sf.query(soql)
-        names = [r["Parent"]["Name"] for r in res.get("records", [])]
-        logger.info(f"Pre-fetched perm sets granting edit on {object_type}.{field_api_name}: {names}")
-        return names
+        records = res.get("records", [])
+        
+        if not records:
+            suffix = "Edit" if required_access == "edit" else "Read"
+            ps_name = f"PS_{object_type}_{field_api_name}_{suffix}" if field_api_name else f"PS_{object_type}_{suffix}"
+            ps_label = f"PS {object_type} {field_api_name} {suffix}" if field_api_name else f"PS {object_type} {suffix}"
+            
+            ps_name = re.sub(r'[^a-zA-Z0-9_]', '', ps_name)
+            ps_name = re.sub(r'_{2,}', '_', ps_name)
+            if ps_name.endswith('_'):
+                ps_name = ps_name[:-1]
+                
+            return {
+                "candidates": [],
+                "recommended": None,
+                "create_proposal": {
+                    "permissionSetName": ps_name,
+                    "permissionSetLabel": ps_label,
+                    "objectType": object_type,
+                    "fieldName": field_api_name,
+                    "accessType": required_access
+                }
+            }
+            
+        candidates = []
+        for r in records:
+            ps_id = r["ParentId"]
+            ps_name = r["Parent"]["Name"]
+            ps_label = r["Parent"]["Label"]
+            
+            sys_query = sf.query(
+                f"SELECT PermissionsViewAllData, PermissionsModifyAllData, PermissionsApiEnabled, "
+                f"PermissionsManageUsers, PermissionsAuthorApex, PermissionsCustomizeApplication "
+                f"FROM PermissionSet WHERE Id = '{ps_id}'"
+            )
+            sys_rec = sys_query.get("records", [{}])[0] if sys_query.get("records") else {}
+            
+            obj_cond = f"AND SObjectType != '{object_type}'" if not field_api_name else ""
+            obj_query = sf.query(f"SELECT COUNT(Id) cnt FROM ObjectPermissions WHERE ParentId = '{ps_id}' {obj_cond}")
+            obj_count = obj_query.get("records", [{"cnt": 0}])[0].get("cnt", 0)
+            
+            fld_cond = f"AND Field != '{object_type}.{field_api_name}'" if field_api_name else ""
+            fld_query = sf.query(
+                f"SELECT COUNT(Id) cnt FROM FieldPermissions "
+                f"WHERE ParentId = '{ps_id}' {fld_cond}"
+            )
+            fld_count = fld_query.get("records", [{"cnt": 0}])[0].get("cnt", 0)
+            
+            high_risk_flags = []
+            for flag in ["PermissionsViewAllData", "PermissionsModifyAllData", "PermissionsManageUsers", "PermissionsAuthorApex", "PermissionsCustomizeApplication"]:
+                if sys_rec.get(flag):
+                    high_risk_flags.append(flag.replace("Permissions", ""))
+                    
+            weight = len(high_risk_flags) * 1000 + obj_count * 10 + fld_count
+            
+            candidates.append({
+                "id": ps_id,
+                "name": ps_name,
+                "label": ps_label,
+                "obj_count": obj_count,
+                "fld_count": fld_count,
+                "high_risk_flags": high_risk_flags,
+                "weight": weight
+            })
+            
+        candidates.sort(key=lambda x: x["weight"])
+        rec = candidates[0]
+        
+        extra_lines = []
+        if rec["high_risk_flags"]:
+            extra_lines.append(f"⚠️ High-risk system overrides: {', '.join(rec['high_risk_flags'])}")
+        if rec["obj_count"] > 0:
+            extra_lines.append(f"Object CRUD access on {rec['obj_count']} other object(s)")
+        if rec["fld_count"] > 0:
+            extra_lines.append(f"FLS access on {rec['fld_count']} other field(s)")
+            
+        extra_text = "None (Minimal / clean assignment)" if not extra_lines else "; ".join(extra_lines)
+        
+        proposal = (
+            f"Recommended Permission Set: **{rec['name']}** (Label: {rec['label']})\n"
+            f"  • Extra Permissions Granted: {extra_text}\n"
+        )
+        if len(candidates) > 1:
+            other_names = ", ".join([c["name"] for c in candidates[1:3]])
+            proposal += f"  • Other options evaluated (with higher risk / more extra permissions): {other_names}\n"
+            
+        return {
+            "candidates": candidates,
+            "recommended": rec,
+            "proposal": proposal,
+            "create_proposal": None
+        }
     except Exception as e:
-        logger.warning(f"_find_permsets_for_field failed (non-fatal): {e}")
-        return []
+        logger.warning(f"Error in _analyze_and_find_minimal_permset: {e}")
+        return None
+
+
+def _get_permset_risk_summary(ps_name: str) -> str:
+    """
+    Queries details of a permission set to describe its system overrides and counts of object/field grants.
+    """
+    try:
+        from app.salesforce.client import get_sf_client
+        sf = get_sf_client()
+        
+        ps_query = sf.query(f"SELECT Id, Label, Description, PermissionsViewAllData, PermissionsModifyAllData, PermissionsApiEnabled, PermissionsManageUsers, PermissionsAuthorApex, PermissionsCustomizeApplication FROM PermissionSet WHERE Name = '{ps_name}' LIMIT 1")
+        if not ps_query.get("records"):
+            return ""
+        ps = ps_query["records"][0]
+        ps_id = ps["Id"]
+        
+        sys_flags = []
+        for flag in ["PermissionsViewAllData", "PermissionsModifyAllData", "PermissionsManageUsers", "PermissionsAuthorApex", "PermissionsCustomizeApplication"]:
+            if ps.get(flag):
+                sys_flags.append(flag.replace("Permissions", ""))
+                
+        obj_query = sf.query(f"SELECT COUNT(Id) cnt FROM ObjectPermissions WHERE ParentId = '{ps_id}'")
+        obj_count = obj_query.get("records", [{"cnt": 0}])[0].get("cnt", 0)
+        
+        fld_query = sf.query(f"SELECT COUNT(Id) cnt FROM FieldPermissions WHERE ParentId = '{ps_id}'")
+        fld_count = fld_query.get("records", [{"cnt": 0}])[0].get("cnt", 0)
+        
+        lines = []
+        if sys_flags:
+            lines.append(f"⚠️ **High-Risk System Flags:** {', '.join(sys_flags)}")
+        if obj_count > 0:
+            lines.append(f"• Grants CRUD permissions on **{obj_count}** object(s)")
+        if fld_count > 0:
+            lines.append(f"• Grants FLS permissions on **{fld_count}** field(s)")
+            
+        if not lines:
+            return "💡 This permission set is clean and carries no extra permissions."
+            
+        risk_desc = "\n".join(lines)
+        return (
+            f"ℹ️ **Extra Permissions / Risk footprint for '{ps_name}':**\n"
+            f"{risk_desc}\n\n"
+            f"*(Note: Assure you understand the scope of access this permission set provides before approving.)*"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to get risk summary for {ps_name}: {e}")
+        return ""
+
+
+def _get_create_permset_summary(args: Dict[str, Any]) -> str:
+    ps_name = args.get("permissionSetName")
+    ps_label = args.get("permissionSetLabel")
+    obj = args.get("objectType")
+    fld = args.get("fieldName")
+    access = args.get("accessType", "edit")
+    
+    target = f"{obj}.{fld}" if fld else obj
+    return (
+        f"💡 **No existing permission set was found that grants the required access.**\n\n"
+        f"I will **CREATE** a new, minimal permission set with the following specifications:\n"
+        f"  • **API Name:** `{ps_name}`\n"
+        f"  • **Label:** `{ps_label}`\n"
+        f"  • **Permissions:** Grant **{access.upper()}** on `{target}`\n"
+        f"  • **Extra Access:** None (completely isolated and minimal)\n\n"
+        f"Once created, I will assign it to the target user."
+    )
+
+
+def _enrich_tool_output(tool_name: str, tool_output_str: str) -> str:
+    if tool_name not in ("sf_explain_access_grant", "sf_get_field_security", "sf_get_object_permissions"):
+        return tool_output_str
+        
+    try:
+        data = json.loads(tool_output_str)
+        if not isinstance(data, dict):
+            return tool_output_str
+            
+        object_type = data.get("objectType")
+        field_name = data.get("fieldName")
+        user_id = data.get("userId")
+        
+        if not object_type:
+            return tool_output_str
+            
+        edit_analysis = _analyze_and_find_minimal_permset(object_type, field_name, required_access="edit")
+        read_analysis = _analyze_and_find_minimal_permset(object_type, field_name, required_access="read")
+        
+        analysis_report = "\n\n=== SFGuard IAM Analysis: Minimal Permission Sets & Risk ==="
+        
+        if edit_analysis:
+            if edit_analysis.get("recommended"):
+                analysis_report += (
+                    f"\nTo grant EDIT access to {object_type}{'.' + field_name if field_name else ''}:\n"
+                    f"{edit_analysis['proposal']}"
+                )
+            elif edit_analysis.get("create_proposal"):
+                prop = edit_analysis["create_proposal"]
+                analysis_report += (
+                    f"\nTo grant EDIT access to {object_type}{'.' + field_name if field_name else ''}:\n"
+                    f"  No existing permission set found.\n"
+                    f"  👉 RECOMMENDATION: Create a new custom permission set. Call tool:\n"
+                    f"  `create_and_assign_permission_set(userId='{user_id}', permissionSetName='{prop['permissionSetName']}', permissionSetLabel='{prop['permissionSetLabel']}', objectType='{prop['objectType']}', fieldName='{prop['fieldName'] or ''}', accessType='edit')`"
+                )
+                
+        if read_analysis:
+            if read_analysis.get("recommended"):
+                analysis_report += (
+                    f"\nTo grant READ access to {object_type}{'.' + field_name if field_name else ''}:\n"
+                    f"{read_analysis['proposal']}"
+                )
+            elif read_analysis.get("create_proposal") and not edit_analysis.get("create_proposal"):
+                prop = read_analysis["create_proposal"]
+                analysis_report += (
+                    f"\nTo grant READ access to {object_type}{'.' + field_name if field_name else ''}:\n"
+                    f"  No existing permission set found.\n"
+                    f"  👉 RECOMMENDATION: Create a new custom permission set. Call tool:\n"
+                    f"  `create_and_assign_permission_set(userId='{user_id}', permissionSetName='{prop['permissionSetName']}', permissionSetLabel='{prop['permissionSetLabel']}', objectType='{prop['objectType']}', fieldName='{prop['fieldName'] or ''}', accessType='read')`"
+                )
+                
+        data["sfguard_remediation_analysis"] = analysis_report
+        return json.dumps(data)
+    except Exception as e:
+        logger.warning(f"Failed to enrich tool output for {tool_name}: {e}")
+        return tool_output_str
 
 
 def run_permissions_agent(
@@ -160,6 +393,46 @@ def run_permissions_agent(
                 }
             })
 
+        # Append custom pseudo-tool definition
+        openai_tools.append({
+            "type": "function",
+            "function": {
+                "name": "create_and_assign_permission_set",
+                "description": "Create a new custom minimal permission set with proper naming conventions, grant the requested field or object level access, and assign it to the user. Use ONLY when no existing permission set grants the needed access.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "userId": {
+                            "type": "string",
+                            "description": "The 18-character Salesforce User ID to assign the permission set to"
+                        },
+                        "permissionSetName": {
+                            "type": "string",
+                            "description": "DeveloperName for the permission set following naming convention: PS_<ObjectName>_<FieldName>_Edit or PS_<ObjectName>_Edit"
+                        },
+                        "permissionSetLabel": {
+                            "type": "string",
+                            "description": "User-friendly Label for the permission set following naming convention: PS <ObjectName> <FieldName> Edit or PS <ObjectName> Edit"
+                        },
+                        "objectType": {
+                            "type": "string",
+                            "description": "Salesforce Object API Name (e.g. Account, Custom_Object__c)"
+                        },
+                        "fieldName": {
+                            "type": "string",
+                            "description": "Salesforce Field API Name (e.g. SLAExpirationDate__c). Omit or leave empty for object-level permission sets."
+                        },
+                        "accessType": {
+                            "type": "string",
+                            "enum": ["read", "edit"],
+                            "description": "The level of access to grant (read or edit)"
+                        }
+                    },
+                    "required": ["userId", "permissionSetName", "permissionSetLabel", "objectType", "accessType"]
+                }
+            }
+        })
+
         llm = get_llm_with_fallbacks(tools=openai_tools)
         system_content = get_permissions_system_prompt()
 
@@ -185,22 +458,42 @@ def run_permissions_agent(
                 "Case", "Campaign", "User", "Task", "Event", "Product2"
             )
             std_obj_pattern = r"\b(" + "|".join(STANDARD_OBJECTS) + r")\b"
-            std_match = _re.search(std_obj_pattern, user_message)
-            if std_match:
-                object_name = std_match.group(1)
+            matches = _re.findall(std_obj_pattern, user_message, flags=_re.IGNORECASE)
+            
+            if matches:
+                # Map case back to standard casing
+                matched_names = []
+                for m in matches:
+                    matched_names.append(next(obj for obj in STANDARD_OBJECTS if obj.lower() == m.lower()))
+                # If "User" is matched but there are other standard objects (like Account), prefer the other one
+                non_user = [m for m in matched_names if m.lower() != "user"]
+                object_name = non_user[0] if non_user else matched_names[0]
             else:
                 # Fallback: any __c token that is NOT the same as the field
                 custom_matches = _re.findall(r"\b([A-Za-z][A-Za-z0-9_]*__[cC])\b", user_message)
                 object_name = next((m for m in custom_matches if m != field_name), None)
 
-            if field_name and object_name:
-                discovered = _find_permsets_for_field(field_name, object_name)
-                if discovered:
-                    perm_set_context = (
-                        f"\n\n[System Pre-fetched Context] The following existing Permission Sets already "
-                        f"grant Edit access to {object_name}.{field_name}: {', '.join(discovered)}. "
-                        f"Use the first one ({discovered[0]}) unless the user specified a different one."
-                    )
+            if object_name:
+                access_type = "edit" if "edit" in msg_lower or "write" in msg_lower or "modify" in msg_lower else "read"
+                analysis = _analyze_and_find_minimal_permset(object_name, field_name, required_access=access_type)
+                if analysis:
+                    if analysis.get("recommended"):
+                        perm_set_context = (
+                            f"\n\n[System Pre-fetched Context] I evaluated the permission sets in your org for {object_name}{'.' + field_name if field_name else ''} ({access_type}):\n"
+                            f"{analysis['proposal']}"
+                            f"Use this recommended permission set via sf_assign_permission_set unless specified otherwise."
+                        )
+                    elif analysis.get("create_proposal"):
+                        prop = analysis["create_proposal"]
+                        perm_set_context = (
+                            f"\n\n[System Pre-fetched Context] No existing permission set was found that grants {access_type} to {object_name}{'.' + field_name if field_name else ''}.\n"
+                            f"You MUST call create_and_assign_permission_set to create a new minimal permission set:\n"
+                            f"  permissionSetName: {prop['permissionSetName']}\n"
+                            f"  permissionSetLabel: {prop['permissionSetLabel']}\n"
+                            f"  objectType: {prop['objectType']}\n"
+                            f"  fieldName: {prop['fieldName'] or ''}\n"
+                            f"  accessType: {prop['accessType']}"
+                        )
 
         user_message_with_reminder = (
             user_message +
@@ -217,13 +510,13 @@ def run_permissions_agent(
             "and 'detail' (plain-text explanation). "
             "Ensure the JSON is well-formed: every opening { must have a matching }, every [ a matching ].\n"
             "- If it is Path C (Write/Modify) AND the user specified an exact permission set name, call sf_get_user_identity to resolve the userId "
-            "then call sf_assign_permission_set (or the relevant write tool) with the resolved userId and permission set name. "
+            "then call sf_assign_permission_set with the resolved userId and permission set name. "
             "The system handles confirmation automatically.\n"
             "- If it is Path C (Write/Modify) AND the user did NOT specify a permission set name (e.g. 'give user X access to field Y'), "
-            "you must first call sf_get_user_identity, then call sf_explain_access_grant (or sf_get_field_security) to discover "
-            "which existing permission set(s) already grant the needed access. "
-            "Pick the most appropriate one from the tool result and then call sf_assign_permission_set with that discovered name. "
-            "Do NOT invent or guess a permission set name — only use names returned by tool results.\n"
+            "you must first call sf_get_user_identity, then look at the [System Pre-fetched Context] (or tools) to discover which existing permission set(s) grant access. "
+            "If an existing permission set is recommended, call sf_assign_permission_set with that name. "
+            "If no existing permission set is found or recommended, you MUST call create_and_assign_permission_set to create a new minimal permission set "
+            "with DeveloperName='PS_<ObjectName>_<FieldName>_Edit' and Label='PS <ObjectName> <FieldName> Edit' (or similar based on target access).\n"
             "- If it is Path D (Bulk Audit), output a Markdown pipe table with | separators.\n"
             "- Copy every ID, permission state, and DeveloperName exactly from tool results — never invent values."
         )
@@ -259,7 +552,15 @@ def run_permissions_agent(
                                 "tool_name": tool_name,
                                 "args": args
                             }
-                        return _build_confirm_card(tool_name, args)
+                        
+                        context = ""
+                        if tool_name == "sf_assign_permission_set":
+                            ps_name = args.get("permissionSetName")
+                            context = _get_permset_risk_summary(ps_name)
+                        elif tool_name == "create_and_assign_permission_set":
+                            context = _get_create_permset_summary(args)
+                            
+                        return _build_confirm_card(tool_name, args, context)
 
                     try:
                         mcp_res = client.call_tool(tool_name, args)
@@ -271,6 +572,9 @@ def run_permissions_agent(
 
                         if not text_content:
                             text_content = json.dumps(mcp_res)
+                            
+                        # Enrich output to provide minimal permsets / creation details
+                        text_content = _enrich_tool_output(tool_name, text_content)
                     except Exception as e:
                         logger.error(f"Error calling tool {tool_name}: {e}")
                         text_content = json.dumps({"error": str(e), "status": "WARN"})
@@ -312,6 +616,106 @@ def execute_pending_write(session_id: str) -> Dict[str, Any]:
 
     logger.info(f"Executing approved write tool: {tool_name} with args: {args}")
 
+    # ── CUSTOM REMEDIATION: Create and assign permission set ───────────
+    if tool_name == "create_and_assign_permission_set":
+        try:
+            from app.salesforce.client import get_sf_client
+            sf = get_sf_client()
+            
+            user_id = args["userId"]
+            ps_name = args["permissionSetName"]
+            ps_label = args["permissionSetLabel"]
+            target_object = args.get("objectType")
+            target_field = args.get("fieldName")
+            required_access = args.get("accessType", "edit")
+            
+            logger.info(f"Creating custom permission set: {ps_name} for user: {user_id}")
+            
+            # 1. Create or retrieve PermissionSet
+            exist_query = sf.query(f"SELECT Id FROM PermissionSet WHERE Name = '{ps_name}' LIMIT 1")
+            exist_records = exist_query.get("records", [])
+            if exist_records:
+                ps_id = exist_records[0]["Id"]
+                logger.info(f"Permission set {ps_name} already exists with Id {ps_id}. Reusing.")
+            else:
+                desc = f"Auto-created by Veloq Copilot to grant {required_access} access to {target_object}"
+                if target_field:
+                    desc += f".{target_field}"
+                ps_res = sf.PermissionSet.create({
+                    "Name": ps_name,
+                    "Label": ps_label,
+                    "Description": desc
+                })
+                ps_id = ps_res["id"]
+                logger.info(f"Created PermissionSet {ps_name} with Id {ps_id}")
+                
+            # 2. Grant Object Permissions
+            obj_exist = sf.query(f"SELECT Id FROM ObjectPermissions WHERE ParentId = '{ps_id}' AND SObjectType = '{target_object}' LIMIT 1")
+            obj_exist_recs = obj_exist.get("records", [])
+            
+            obj_perms = {
+                "ParentId": ps_id,
+                "SObjectType": target_object,
+                "PermissionsRead": True,
+                "PermissionsEdit": required_access == "edit"
+            }
+            
+            if obj_exist_recs:
+                obj_perm_id = obj_exist_recs[0]["Id"]
+                sf.ObjectPermissions.update(obj_perm_id, {
+                    "PermissionsRead": True,
+                    "PermissionsEdit": required_access == "edit"
+                })
+            else:
+                sf.ObjectPermissions.create(obj_perms)
+                
+            # 3. Grant Field Permissions (FLS) if target field specified
+            if target_field:
+                fld_api = f"{target_object}.{target_field}"
+                fld_exist = sf.query(f"SELECT Id FROM FieldPermissions WHERE ParentId = '{ps_id}' AND SObjectType = '{target_object}' AND Field = '{fld_api}' LIMIT 1")
+                fld_exist_recs = fld_exist.get("records", [])
+                
+                fld_perms = {
+                    "ParentId": ps_id,
+                    "SObjectType": target_object,
+                    "Field": fld_api,
+                    "PermissionsRead": True,
+                    "PermissionsEdit": required_access == "edit"
+                }
+                
+                if fld_exist_recs:
+                    fld_perm_id = fld_exist_recs[0]["Id"]
+                    sf.FieldPermissions.update(fld_perm_id, {
+                        "PermissionsRead": True,
+                        "PermissionsEdit": required_access == "edit"
+                    })
+                else:
+                    sf.FieldPermissions.create(fld_perms)
+                    
+            # 4. Assign Permission Set to User
+            assign_exist = sf.query(f"SELECT Id FROM PermissionSetAssignment WHERE PermissionSetId = '{ps_id}' AND AssigneeId = '{user_id}' LIMIT 1")
+            assign_exist_recs = assign_exist.get("records", [])
+            if assign_exist_recs:
+                logger.info(f"Permission set {ps_name} is already assigned to user {user_id}")
+            else:
+                sf.PermissionSetAssignment.create({
+                    "PermissionSetId": ps_id,
+                    "AssigneeId": user_id
+                })
+                logger.info(f"Assigned PermissionSet {ps_name} to user {user_id}")
+                
+            return {
+                "action": "CHAT",
+                "message": f"✅ **{label} completed successfully.**\n\nCreated permission set **{ps_name}** with **{required_access.upper()}** access on **{target_object}{'.' + target_field if target_field else ''}** and assigned it to the user."
+            }
+        except Exception as e:
+            logger.error(f"Error in custom create & assign permset: {e}")
+            return {
+                "action": "CHAT",
+                "message": f"❌ **{label} failed:** {str(e)}"
+            }
+
+    # ── STANDARD MCP WRITE TOOL CALL ───────────────────────────────────
     client = MCPClient()
     try:
         client.start()

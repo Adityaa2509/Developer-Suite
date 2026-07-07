@@ -21,7 +21,10 @@ def run_pre_fetch(
     sections = []
 
     def _section(title: str, content: str) -> None:
-        sections.append(f"{'='*60}\n{title}\n{'='*60}\n{content}\n")
+        content_str = str(content)
+        if len(content_str) > 4000:
+            content_str = content_str[:4000] + "\n...[Content truncated to 4000 chars to fit token limits]...\n"
+        sections.append(f"{'='*60}\n{title}\n{'='*60}\n{content_str}\n")
 
     def _safe(fn, **kwargs) -> str:
         try:

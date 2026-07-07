@@ -6,11 +6,12 @@ Receives pre-fetched context in state['pre_context'].
 Uses loop calls only for deep inspection (get_flow_details, get_trigger_details).
 """
 
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 from app.agent.state import InvestigationState
 from app.agent.prompts import INVESTIGATION_SYSTEM_PROMPT, build_initial_message
 from app.tools.registry import ALL_TOOLS
 from app.core.llm import get_llm_with_fallbacks
+from app.core.config import get_settings
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -41,6 +42,39 @@ TOOL_DISPLAY_NAMES = {
 }
 
 _llm_with_tools = None
+_gemini_with_tools = None
+
+# Groq free-tier TPM limit is 12,000 tokens/min. We target 9,000 as a safe budget
+# (system + initial task take ~3,000 tokens, leaving 9,000 for conversation history).
+GROQ_SAFE_HISTORY_TOKENS = 9_000
+
+# Gemini 2.0 Flash supports 1M token context — used as overflow fallback.
+
+
+def _estimate_tokens(messages: list) -> int:
+    """Rough estimate: 1 token ≈ 4 characters."""
+    total = sum(len(str(getattr(m, 'content', '') or '')) for m in messages)
+    return total // 4
+
+
+def _trim_history(messages: list, max_tokens: int = GROQ_SAFE_HISTORY_TOKENS) -> list:
+    """
+    Drop the OLDEST ToolMessage results first (they hold large raw JSON dumps)
+    until the history fits within max_tokens. Falls back to dropping any old
+    message if no ToolMessages remain.
+    """
+    trimmed = list(messages)
+    while _estimate_tokens(trimmed) > max_tokens and len(trimmed) > 1:
+        # Prefer removing the oldest ToolMessage (cheapest information lost)
+        removed = False
+        for i, msg in enumerate(trimmed):
+            if isinstance(msg, ToolMessage):
+                trimmed.pop(i)
+                removed = True
+                break
+        if not removed:
+            trimmed.pop(0)   # last resort: drop oldest message of any kind
+    return trimmed
 
 
 def _get_llm_with_tools():
@@ -49,6 +83,59 @@ def _get_llm_with_tools():
         _llm_with_tools = get_llm_with_fallbacks(tools=ALL_TOOLS)
     return _llm_with_tools
 
+
+def _get_gemini_with_tools():
+    """Gemini-first LLM with 1M-token context for overflow requests."""
+    global _gemini_with_tools
+    if _gemini_with_tools is None:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_groq import ChatGroq
+        s = get_settings()
+        # Primary: Gemini (large context)
+        primary = ChatGoogleGenerativeAI(
+            model=s.GEMINI_MODEL_PRIMARY,
+            google_api_key=s.GEMINI_API_KEY,
+            temperature=0.1,
+            convert_system_message_to_human=True,
+            max_retries=2,
+        )
+        fallbacks = []
+        if s.GEMINI_API_KEY_FALLBACK:
+            fallbacks.append(ChatGoogleGenerativeAI(
+                model=s.GEMINI_MODEL_PRIMARY,
+                google_api_key=s.GEMINI_API_KEY_FALLBACK,
+                temperature=0.1,
+                convert_system_message_to_human=True,
+                max_retries=2,
+            ))
+        fallbacks.append(ChatGoogleGenerativeAI(
+            model=s.GEMINI_MODEL_FALLBACK,
+            google_api_key=s.GEMINI_API_KEY,
+            temperature=0.1,
+            convert_system_message_to_human=True,
+            max_retries=2,
+        ))
+        if s.GEMINI_API_KEY_FALLBACK:
+            fallbacks.append(ChatGoogleGenerativeAI(
+                model=s.GEMINI_MODEL_FALLBACK,
+                google_api_key=s.GEMINI_API_KEY_FALLBACK,
+                temperature=0.1,
+                convert_system_message_to_human=True,
+                max_retries=2,
+            ))
+        # Last resort: Groq with trimmed context
+        fallbacks.append(ChatGroq(
+            model=s.GROQ_MODEL,
+            api_key=s.GROQ_API_KEY,
+            temperature=0.1,
+            max_retries=3,
+        ))
+        _gemini_with_tools = primary.with_fallbacks(
+            [m.bind_tools(ALL_TOOLS) for m in fallbacks],
+            exceptions_to_handle=(Exception,),
+        ).bind_tools(ALL_TOOLS)
+        logger.info("Gemini overflow LLM initialised (1M context window).")
+    return _gemini_with_tools
 
 
 def agent_node(state: InvestigationState) -> dict:
@@ -143,7 +230,30 @@ STEP 5 — TOOLS ALREADY COVERED IN PRE-SCAN (do NOT re-call):
         initial_content = base_task
 
     initial      = HumanMessage(content=initial_content)
-    all_messages = [system, initial] + state["messages"]
+
+    # ── Trim history to stay within Groq's 12K TPM free-tier limit ──────────
+    history = state["messages"]
+    original_count = len(history)
+    history = _trim_history(history, max_tokens=GROQ_SAFE_HISTORY_TOKENS)
+    if len(history) < original_count:
+        logger.info(
+            f"Trimmed message history {original_count} → {len(history)} messages "
+            f"(~{_estimate_tokens(history)} tokens) to fit Groq 12K TPM limit"
+        )
+
+    all_messages = [system, initial] + history
+
+    # ── Invoke: try standard chain, overflow to Gemini if still too large ───
+    estimated = _estimate_tokens(all_messages)
+    if estimated > GROQ_SAFE_HISTORY_TOKENS + 3500:   # > ~12K total
+        logger.info(
+            f"Message payload ~{estimated} tokens — routing directly to Gemini "
+            "(1M context window) to bypass Groq TPM limit."
+        )
+        llm = _get_gemini_with_tools()
+    else:
+        llm = _get_llm_with_tools()
+
     response     = llm.invoke(all_messages)
 
     job_id = state.get("job_id")
